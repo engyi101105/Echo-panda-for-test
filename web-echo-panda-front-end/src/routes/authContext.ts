@@ -20,6 +20,7 @@ interface UserData {
   displayName?: string;
   photoURL?: string;
   uid?: string;
+  authProvider?: "google" | "email";
   backendRole?: "user" | "artist" | "publicer" | "admin";
 }
 
@@ -107,6 +108,7 @@ export async function SignInWithGoogle(): Promise<UserData> {
     photoURL: user.photoURL || "",
     uid: user.uid,
     registeredAt: new Date().toISOString(),
+    authProvider: "google",
     backendRole: backendAuth.user.role,
   };
 
@@ -174,6 +176,7 @@ export async function registerWithEmail(
       photoURL: user.photoURL || "",
       uid: user.uid,
       registeredAt: new Date().toISOString(),
+      authProvider: "email",
       backendRole: backendAuth.user.role,
     };
 
@@ -243,6 +246,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
       photoURL: user.photoURL || "",
       uid: user.uid,
       registeredAt: userDoc.exists() ? userDoc.data().registeredAt : new Date().toISOString(),
+      authProvider: "email",
       backendRole: backendAuth.user.role,
     };
 

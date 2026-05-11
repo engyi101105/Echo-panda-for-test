@@ -46,12 +46,22 @@ class AuthController extends Controller
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = User::where('email', $request->email)->first();
+        $users = User::where('email', $request->email)->get();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        $user = $users->first(function (User $candidate) use ($request) {
+            return Hash::check($request->password, $candidate->password);
+        });
+
+        if (! $user) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
+        }
+
+        $adminUser = $users->firstWhere('role', User::ROLE_ADMIN);
+
+        if ($adminUser && Hash::check($request->password, $adminUser->password)) {
+            $user = $adminUser;
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -103,14 +113,16 @@ class AuthController extends Controller
     {
         $validated = $request->validated();
 
-        $user = User::firstOrCreate(
-            ['email' => $validated['email']],
-            [
+        $users = User::where('email', $validated['email'])->get();
+
+        $user = $users->firstWhere('role', User::ROLE_ADMIN)
+            ?? $users->first()
+            ?? User::create([
+                'email' => $validated['email'],
                 'name' => $validated['name'] ?? explode('@', $validated['email'])[0],
                 'password' => Hash::make((string) str()->uuid()),
                 'role' => User::ROLE_USER,
-            ]
-        );
+            ]);
 
         if (! empty($validated['name']) && $user->name !== $validated['name']) {
             $user->name = $validated['name'];

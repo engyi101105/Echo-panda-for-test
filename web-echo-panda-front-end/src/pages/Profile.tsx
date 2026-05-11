@@ -9,6 +9,8 @@ interface UserData {
   displayName?: string;
   photoURL?: string;
   uid?: string;
+  authProvider?: "google" | "email";
+  backendRole?: "user" | "artist" | "publicer" | "admin";
 }
 
 const Profile: React.FC = () => {
@@ -61,7 +63,7 @@ const Profile: React.FC = () => {
   }
 
   const displayName = user.displayName || user.username || "User";
-  const isGoogleUser = !!user.uid;
+  const isGoogleUser = user.authProvider === "google";
   const memberSince = user.registeredAt
     ? new Date(user.registeredAt).toLocaleDateString("en-US", {
         year: "numeric",
@@ -105,7 +107,21 @@ const Profile: React.FC = () => {
                 <h2 className="text-xl font-bold text-white mb-1">
                   {displayName}
                 </h2>
-                <p className="text-sm text-gray-400 mb-4">{user.email}</p>
+                <p className="text-sm text-gray-400 mb-2">{user.email}</p>
+
+                {user.backendRole && (
+                  <div className="mb-4">
+                    <span
+                      className={`inline-block px-2 py-1 text-xs font-semibold rounded ${
+                        user.backendRole === "admin"
+                          ? "bg-red-600 text-white"
+                          : "bg-gray-700 text-gray-200"
+                      }`}
+                    >
+                      {user.backendRole.charAt(0).toUpperCase() + user.backendRole.slice(1)}
+                    </span>
+                  </div>
+                )}
 
                 {isGoogleUser && (
                   <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg">
