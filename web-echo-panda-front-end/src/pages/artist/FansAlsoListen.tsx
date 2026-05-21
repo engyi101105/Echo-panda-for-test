@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import ArtistSection from '../home/Artists';
-import { supabase } from '../../backend/supabaseClient';
+import { getDerivedArtists } from '../../backend/catalogService';
 import { useDataCache } from '../../contexts/DataCacheContext';
 
 interface Artist {
@@ -27,21 +27,10 @@ export default function FansAlsoListen({ artistId }: Props) {
       const data = await getCachedData(`fans_also_listen_${artistId || 'all'}`, async () => {
         console.log('🔄 [Fans Also Listen] Fetching related artists...');
 
-        let query = supabase
-          .from('artists')
-          .select('id, name, image_url')
-          .eq('status', true)
-          .order('name', { ascending: true })
-          .limit(10);
-
-        // Exclude current artist if provided
+        let artistsData = await getDerivedArtists(20);
         if (artistId) {
-          query = query.neq('id', artistId);
+          artistsData = artistsData.filter((artist) => artist.id !== artistId && encodeURIComponent(artist.name) !== artistId);
         }
-
-        const { data: artistsData, error } = await query;
-
-        if (error) throw error;
         console.log(`✅ [Fans Also Listen] ${artistsData?.length || 0} artists loaded`);
         return artistsData || [];
       });

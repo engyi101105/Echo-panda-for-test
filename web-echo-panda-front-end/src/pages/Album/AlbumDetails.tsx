@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaArrowLeft, FaEllipsisH, FaSpinner } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import { useAudioPlayer } from "../../contexts/AudioPlayerContext";
 import { trackSongPlay } from "../../backend/playTrackingService";
 import Song from "../../components/Song";
+
+const viteEnv = (import.meta as any).env || {};
+const BACKEND_API_BASE_URL = viteEnv.VITE_BACKEND_API_URL || "http://localhost:8082/api";
 
 interface Artist {
   id: string;
@@ -60,63 +62,49 @@ const AlbumDetails: React.FC = () => {
     try {
       setLoading(true);
 
-      const data = await getCachedData(`album_details_${albumId}`, async () => {
-        // Fetch album meta including artists
-        const { data: albumData, error: albumError } = await supabase
-        .from("albums")
-        .select(`
-          id,
-          title,
-          cover_url,
-          release_date,
-          type,
-          album_artist(
-            artists(id, name, image_url)
-          )
-        `)
-        .eq("id", albumId)
-        .single();
+      if (!/^\d+$/.test(albumId)) {
+        // Legacy Supabase UUID route id; backend albums use numeric ids.
+        setAlbum(null);
+        setSongs([]);
+        return;
+      }
 
-      if (albumError) throw albumError;
+      const data = await getCachedData(`album_details_${albumId}`, async () => {
+        const response = await fetch(`${BACKEND_API_BASE_URL}/albums/${albumId}`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch album details");
+        }
+
+        const albumData = await response.json();
 
         const meta: AlbumMeta = {
-          id: albumData.id,
+          id: String(albumData.id),
           title: albumData.title,
-          cover_url: albumData.cover_url || undefined,
+          cover_url: albumData.s3_cover_image_url || albumData.cover_image || undefined,
           release_date: albumData.release_date || undefined,
           type: albumData.type || undefined,
-          artists: albumData.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || [],
+          artists: albumData.artist
+            ? [{ id: String(albumData.id), name: albumData.artist }]
+            : [],
         };
 
-        // Fetch songs in the album
-        const { data: songsData, error: songsError } = await supabase
-          .from("songs")
-          .select(`
-            id,
-            title,
-            duration,
-            album_id,
-            audio_url,
-            songCover_url,
-            created_at,
-            song_artist(
-              artists(id, name, image_url)
-            )
-          `)
-          .eq("album_id", albumId)
-          .order("created_at", { ascending: true });
-
-        if (songsError) throw songsError;
+        const songsData = Array.isArray(albumData?.songs) ? albumData.songs : [];
 
         const transformed: SongData[] = (songsData || []).map((s: any) => ({
-          id: s.id,
+          id: String(s.id),
           title: s.title,
           duration: s.duration,
-          album_id: s.album_id,
-          audio_url: s.audio_url,
-          songCover_url: s.songCover_url,
+          album_id: s.album_id ? String(s.album_id) : null,
+          audio_url: s.s3_audio_url || null,
+          songCover_url: s.songCover_url || meta.cover_url || null,
           created_at: s.created_at,
-          artists: s.song_artist?.map((sa: any) => sa.artists) || [],
+          artists: s.artist ? [{ id: String(s.id), name: s.artist }] : [],
         }));
 
         return { album: meta, songs: transformed };
@@ -166,7 +154,7 @@ const AlbumDetails: React.FC = () => {
   if (!album) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
-        <p className="text-xl mb-4">Album not found</p>
+        <p className="text-xl mb-4">Album not found in backend data</p>
         <button onClick={() => navigate(-1)} className="px-6 py-3 bg-purple-600 rounded-lg font-semibold">Go Back</button>
       </div>
     );

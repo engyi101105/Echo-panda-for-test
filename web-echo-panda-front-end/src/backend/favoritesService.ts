@@ -1,36 +1,72 @@
-import { supabase } from "./supabaseClient";
+const viteEnv = (import.meta as any).env || {};
+const BACKEND_API_BASE_URL =
+  viteEnv.VITE_BACKEND_API_URL || "http://localhost:8082/api";
 
-// Get current user UID from localStorage
-const getCurrentUserUID = (): string | null => {
-  const user = localStorage.getItem("user");
-  if (!user) return null;
-  try {
-    const userData = JSON.parse(user);
-    return userData.uid || null;
-  } catch {
+const getBackendToken = (): string | null => {
+  return localStorage.getItem("userToken") || localStorage.getItem("authToken");
+};
+
+const toSongId = (songId: string): number | null => {
+  // Backend songs use numeric IDs. Reject UUID values instead of coercing them.
+  if (!/^\d+$/.test(songId)) {
     return null;
   }
+
+  return Number.parseInt(songId, 10);
+};
+
+const backendRequest = async <T = any>(
+  path: string,
+  init: RequestInit = {}
+): Promise<T> => {
+  const token = getBackendToken();
+
+  if (!token) {
+    throw new Error("Missing backend auth token");
+  }
+
+  const response = await fetch(`${BACKEND_API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(init.headers || {}),
+    },
+  });
+
+  let data: any = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message = data?.message || `Request failed with ${response.status}`;
+    throw new Error(message);
+  }
+
+  return data as T;
 };
 
 // Check if a song is in user's favorites
 export const isSongFavorite = async (songId: string): Promise<boolean> => {
-  const uid = getCurrentUserUID();
-  if (!uid) return false;
+  if (!getBackendToken()) return false;
+
+  const parsedSongId = toSongId(songId);
+  if (parsedSongId === null) return false;
 
   try {
-    const { data, error } = await supabase
-      .from("user_favorite_songs")
-      .select("*")
-      .eq("user_id", uid)
-      .eq("song_id", songId)
-      .single();
+    const data = await backendRequest<{ is_favorited: boolean }>(
+      "/favorites/songs/check",
+      {
+        method: "POST",
+        body: JSON.stringify({ song_id: parsedSongId }),
+      }
+    );
 
-    if (error && error.code !== "PGRST116") {
-      console.error("Error checking favorite:", error);
-      return false;
-    }
-
-    return !!data;
+    return !!data?.is_favorited;
   } catch (error) {
     console.error("Error checking favorite:", error);
     return false;
@@ -39,36 +75,36 @@ export const isSongFavorite = async (songId: string): Promise<boolean> => {
 
 // Add song to favorites
 export const addToFavorites = async (songId: string): Promise<boolean> => {
-  const uid = getCurrentUserUID();
-  if (!uid) {
+  const parsedSongId = toSongId(songId);
+
+  if (parsedSongId === null) {
+    console.error(
+      "❌ [Favorites] Invalid song id for backend favorites (expected numeric PostgreSQL id):",
+      songId
+    );
+    return false;
+  }
+
+  if (!getBackendToken()) {
     console.error("❌ [Favorites] User not logged in - cannot add to favorites");
     return false;
   }
 
-  console.log(`🔄 [Favorites] Adding song ${songId} to favorites for user ${uid}`);
+  console.log(`🔄 [Favorites] Adding song ${parsedSongId} to favorites`);
 
   try {
-    const { error } = await supabase
-      .from("user_favorite_songs")
-      .insert({
-        user_id: uid,
-        song_id: songId,
-      });
+    await backendRequest("/favorites/songs", {
+      method: "POST",
+      body: JSON.stringify({ song_id: parsedSongId }),
+    });
 
-    if (error) {
-      console.error("❌ [Favorites] Error adding to favorites:", error);
-      console.error("❌ [Favorites] Error details:", {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-      return false;
+    console.log(`✅ [Favorites] Song ${parsedSongId} added to favorites`);
+    return true;
+  } catch (error: any) {
+    if ((error?.message || "").toLowerCase().includes("already in favorites")) {
+      return true;
     }
 
-    console.log(`✅ [Favorites] Song ${songId} added to favorites`);
-    return true;
-  } catch (error) {
     console.error("❌ [Favorites] Exception adding to favorites:", error);
     return false;
   }
@@ -76,27 +112,34 @@ export const addToFavorites = async (songId: string): Promise<boolean> => {
 
 // Remove song from favorites
 export const removeFromFavorites = async (songId: string): Promise<boolean> => {
-  const uid = getCurrentUserUID();
-  if (!uid) {
+  const parsedSongId = toSongId(songId);
+
+  if (parsedSongId === null) {
+    console.error(
+      "Invalid song id for backend favorites (expected numeric PostgreSQL id)",
+      songId
+    );
+    return false;
+  }
+
+  if (!getBackendToken()) {
     console.error("User not logged in");
     return false;
   }
 
   try {
-    const { error } = await supabase
-      .from("user_favorite_songs")
-      .delete()
-      .eq("user_id", uid)
-      .eq("song_id", songId);
+    await backendRequest("/favorites/songs/remove", {
+      method: "POST",
+      body: JSON.stringify({ song_id: parsedSongId }),
+    });
 
-    if (error) {
-      console.error("Error removing from favorites:", error);
-      return false;
+    console.log(`✅ Song ${parsedSongId} removed from favorites`);
+    return true;
+  } catch (error: any) {
+    if ((error?.message || "").toLowerCase().includes("favorite not found")) {
+      return true;
     }
 
-    console.log(`✅ Song ${songId} removed from favorites`);
-    return true;
-  } catch (error) {
     console.error("Error removing from favorites:", error);
     return false;
   }
@@ -104,21 +147,16 @@ export const removeFromFavorites = async (songId: string): Promise<boolean> => {
 
 // Get all favorite songs for current user
 export const getUserFavorites = async (): Promise<string[]> => {
-  const uid = getCurrentUserUID();
-  if (!uid) return [];
+  if (!getBackendToken()) return [];
 
   try {
-    const { data, error } = await supabase
-      .from("user_favorite_songs")
-      .select("song_id")
-      .eq("user_id", uid);
+    const data = await backendRequest<{ data?: any[] }>("/profile/favorite-songs");
+    const rows = data?.data || [];
 
-    if (error) {
-      console.error("Error fetching favorites:", error);
-      return [];
-    }
-
-    return (data || []).map((item) => item.song_id);
+    return rows
+      .map((item: any) => item?.favoritable?.id ?? item?.favoritable_id)
+      .filter((id: any) => id !== undefined && id !== null)
+      .map((id: any) => String(id));
   } catch (error) {
     console.error("Error fetching favorites:", error);
     return [];

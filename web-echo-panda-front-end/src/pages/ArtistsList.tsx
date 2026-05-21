@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../backend/supabaseClient";
+import { getDerivedArtists } from "../backend/catalogService";
 import { useDataCache } from "../contexts/DataCacheContext";
 import AppFooter from "./home/AppFooter";
 import { FaSpinner } from "react-icons/fa";
@@ -9,11 +9,11 @@ interface Artist {
   id: string;
   name: string;
   image_url: string;
-  bio: string;
-  gender: string;
-  role: string;
-  status: boolean;
-  created_at: string;
+  bio?: string;
+  gender?: string;
+  role?: string;
+  status?: boolean;
+  created_at?: string;
 }
 
 const ArtistsList: React.FC = () => {
@@ -36,18 +36,13 @@ const ArtistsList: React.FC = () => {
         const startTime = performance.now();
         console.log("🔄 [ArtistsList] Fetching all artists...");
 
-        const { data: artistsData, error } = await supabase
-          .from("artists")
-          .select("*")
-          .eq("status", true)
-          .order("name", { ascending: true });
+        const artistsData = await getDerivedArtists(500);
 
         const fetchTime = performance.now() - startTime;
         console.log(
           `✅ [ArtistsList] Artists fetched in ${fetchTime.toFixed(0)}ms. Count: ${artistsData?.length || 0}`
         );
 
-        if (error) throw error;
         return artistsData || [];
       });
 

@@ -22,6 +22,7 @@ class Album extends Model
         'release_date',
         'description',
         'cover_image',
+        's3_cover_image_url',
     ];
 
     /**
@@ -42,5 +43,13 @@ class Album extends Model
     public function songs(): HasMany
     {
         return $this->hasMany(Song::class);
+    }
+
+    /**
+     * Get all favorites for this album.
+     */
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
     }
 }

@@ -8,7 +8,7 @@ import { getAdminBackendUrl, loginFirebaseUserToBackend } from "../../routes/bac
 
 const db = getFirestore(app);
 
-export default function AdminLogin() {
+export default function ArtistLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,8 +59,8 @@ export default function AdminLogin() {
         return;
       }
 
-      // Store admin/artist info in localStorage for persistent login
-      localStorage.setItem("adminUser", JSON.stringify({
+      // Store artist info in localStorage for persistent login
+      localStorage.setItem("artistUser", JSON.stringify({
         uid: user.uid,
         email: user.email,
         name: adminData?.name || user.displayName || "Admin/Artist",
@@ -74,7 +74,7 @@ export default function AdminLogin() {
       }
 
       // Artist/publicer -> frontend dashboard
-      navigate("/admin/dashboard");
+      navigate("/artist/dashboard");
     } catch (err: any) {
       console.error("Login error:", err);
       

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../backend/supabaseClient";
+import { getAlbums, getDerivedCategories } from "../backend/catalogService";
 import { useDataCache } from "../contexts/DataCacheContext";
 import { FaSpinner, FaArrowLeft } from "react-icons/fa";
 import AlbumCard from "../components/AlbumCard";
@@ -47,45 +47,31 @@ const CategoryAlbums: React.FC = () => {
         const startTime = performance.now();
         console.log(`🔄 [CategoryAlbums] Fetching category ${categoryId}...`);
 
-        // Fetch category details
-        const { data: categoryData, error: categoryError } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('id', categoryId)
-        .single();
+        const [categories, albumsData] = await Promise.all([
+          getDerivedCategories(),
+          getAlbums(200, 0),
+        ]);
 
-        if (categoryError) throw categoryError;
-
-        // Fetch albums in this category
-        const { data: albumData, error: albumError } = await supabase
-          .from('album_category')
-          .select(`
-            albums(
-              id,
-              title,
-              cover_url,
-              type,
-              album_artist(
-                artists(id, name, image_url)
-              )
-            )
-          `)
-          .eq('category_id', categoryId);
+        const categoryData = categories.find((c) => c.id === categoryId) || null;
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [CategoryAlbums] Data fetched in ${fetchTime.toFixed(0)}ms`);
 
-        if (albumError) throw albumError;
-
-        const transformedAlbums: Album[] = (albumData || [])
-          .map((item: any) => item.albums)
-          .filter(Boolean)
+        const normalized = (categoryData?.name || "").toLowerCase();
+        const transformedAlbums: Album[] = (albumsData || [])
+          .filter((album: any) => {
+            if (!normalized) return true;
+            const title = String(album.title || "").toLowerCase();
+            const artist = String(album.artists?.[0]?.name || "").toLowerCase();
+            const type = String(album.type || "").toLowerCase();
+            return title.includes(normalized) || artist.includes(normalized) || type.includes(normalized);
+          })
           .map((album: any) => ({
             id: album.id,
             title: album.title,
-            cover_url: album.cover_url,
-            type: album.type,
-            artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+            cover_url: album.cover_url || "",
+            type: album.type || "album",
+            artists: album.artists || [],
           }));
 
         return { category: categoryData, albums: transformedAlbums };

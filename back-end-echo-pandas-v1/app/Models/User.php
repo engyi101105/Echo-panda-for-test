@@ -63,6 +63,54 @@ class User extends Authenticatable
         return in_array($this->role, [self::ROLE_ARTIST, self::ROLE_PUBLICER], true);
     }
 
+    /**
+     * Get all favorites for the user.
+     */
+    public function favorites()
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
+    /**
+     * Get user's listen history.
+     */
+    public function listenHistory()
+    {
+        return $this->hasMany(ListenHistory::class);
+    }
+
+    /**
+     * Get user's song ratings.
+     */
+    public function ratings()
+    {
+        return $this->hasMany(Rating::class);
+    }
+
+    /**
+     * Get user's genre preferences.
+     */
+    public function preferences()
+    {
+        return $this->hasMany(UserPreference::class);
+    }
+
+    /**
+     * Get artists this user is following.
+     */
+    public function following()
+    {
+        return $this->hasMany(ArtistFollower::class, 'user_id');
+    }
+
+    /**
+     * Get users following this artist.
+     */
+    public function followers()
+    {
+        return $this->hasMany(ArtistFollower::class, 'artist_user_id');
+    }
+
     public function roleRedirectTarget(): string
     {
         if ($this->isAdmin()) {

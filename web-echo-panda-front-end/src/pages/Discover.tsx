@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../backend/supabaseClient";
+import { getAlbums, getDerivedCategories } from "../backend/catalogService";
 import { useDataCache } from "../contexts/DataCacheContext";
 import { getMostPlayedAlbums } from "../backend/playTrackingService";
 import SongSection from "./home/Songs";
@@ -52,16 +52,12 @@ const Discover: React.FC = () => {
         const startTime = performance.now();
         console.log('🔄 [Discover] Fetching categories...');
 
-        const { data: categoriesData, error } = await supabase
-          .from('categories')
-          .select('*')
-          .order('name', { ascending: true });
+        const categoriesData = await getDerivedCategories();
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Discover] Categories fetched in ${fetchTime.toFixed(0)}ms`);
         console.log(`📊 [Discover] Retrieved ${categoriesData?.length || 0} categories`);
 
-        if (error) throw error;
         return categoriesData || [];
       });
 
@@ -81,32 +77,18 @@ const Discover: React.FC = () => {
         const startTime = performance.now();
         console.log('🔄 [Discover] Fetching new release albums...');
 
-        const { data: albumsData, error } = await supabase
-          .from('albums')
-          .select(`
-            id,
-            title,
-            cover_url,
-            release_date,
-            album_artist(
-              artists(id, name, image_url)
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(10);
+        const albumsData = await getAlbums(10, 0);
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Discover] New releases fetched in ${fetchTime.toFixed(0)}ms`);
         console.log(`📊 [Discover] Retrieved ${albumsData?.length || 0} albums`);
-
-        if (error) throw error;
 
         return (albumsData || []).map((album: any) => ({
           id: album.id,
           title: album.title,
           cover_url: album.cover_url,
           release_date: album.release_date,
-          artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || [],
+          artists: album.artists || [],
         }));
       });
 

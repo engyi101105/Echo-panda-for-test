@@ -4,10 +4,10 @@ import {
   FaClock, FaPlus, FaMicrophone, 
   FaCalendarAlt, FaCompactDisc, FaSpinner
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { deleteFromR2 } from "../../backend/r2Client";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import SongModal from "./SongModal";
+import { deleteSong, getAdminAlbums, getAdminArtists, getAdminSongs } from "../../backend/adminApi";
 // main song component
 // Data fetching & state management
 // Song table display
@@ -29,6 +29,7 @@ interface Song {
   title: string;
   duration: number; // in seconds
   album_id: string | null;
+  track_number?: number;
   audio_url: string;
   songCover_url: string;
   created_at: string;
@@ -65,32 +66,10 @@ export default function SongsManager() {
         const startTime = performance.now();
         console.log('🔄 [Admin] Fetching songs...');
 
-        const { data: songsData, error } = await supabase
-          .from('songs')
-          .select(`
-            id,
-            title,
-            duration,
-            album_id,
-            audio_url,
-            songCover_url,
-            created_at,
-            updated_at,
-            song_artist(
-              artists(id, name, image_url)
-            ),
-            albums(id, title, cover_url)
-          `)
-          .order('created_at', { ascending: false })
-          .limit(50);
+        const songsData = await getAdminSongs(200);
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ Songs fetched in ${fetchTime.toFixed(0)}ms`);
-
-        if (error) {
-          console.error('❌ Fetch error:', error);
-          throw error;
-        }
 
       // Transform the data to match our interface
       const transformedSongs = (songsData || []).map((song: any) => ({
@@ -102,8 +81,9 @@ export default function SongsManager() {
         songCover_url: song.songCover_url,
         created_at: song.created_at,
         updated_at: song.updated_at,
-        artists: song.song_artist?.map((sa: any) => sa.artists).filter(Boolean) || [],
-        album: song.albums || null
+        track_number: song.track_number,
+        artists: song.artists || [],
+        album: song.album || null
       }));
 
         console.log(`📊 Transformed ${transformedSongs.length} songs`);
@@ -124,14 +104,7 @@ export default function SongsManager() {
   const fetchArtists = async () => {
     try {
       const data = await getCachedData('admin_artists_list', async () => {
-        const { data, error } = await supabase
-          .from('artists')
-          .select('id, name, image_url')
-          .eq('status', true)
-          .order('name');
-
-        if (error) throw error;
-        return data || [];
+        return await getAdminArtists();
       });
 
       setAllArtists(data);
@@ -143,13 +116,7 @@ export default function SongsManager() {
   const fetchAlbums = async () => {
     try {
       const data = await getCachedData('admin_albums_list', async () => {
-        const { data, error } = await supabase
-          .from('albums')
-          .select('id, title, cover_url')
-          .order('title');
-
-        if (error) throw error;
-        return data || [];
+        return await getAdminAlbums(300);
       });
 
       setAllAlbums(data);
@@ -189,12 +156,7 @@ export default function SongsManager() {
       const song = songs.find(s => s.id === id);
       
       // Delete from database first
-      const { error } = await supabase
-        .from('songs')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteSong(id);
 
       // Delete files from R2 if they exist
       if (song) {

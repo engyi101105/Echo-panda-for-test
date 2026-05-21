@@ -3,8 +3,8 @@ import {
   FaEye, FaEdit, FaBan, FaSearch, FaTimes, FaPlus, 
   FaCamera, FaMars, FaVenus, FaGenderless, FaCalendarAlt, FaCheckCircle, FaTimesCircle
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { getAdminArtists } from "../../backend/adminApi";
 
 interface Artist {
   id: string;
@@ -47,12 +47,7 @@ export default function ArtistsManager() {
       setLoading(true);
 
       const data = await getCachedData('admin_artists', async () => {
-        const { data, error } = await supabase
-          .from('artists')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
+        const data = await getAdminArtists();
         return data || [];
       });
 
@@ -102,35 +97,19 @@ export default function ArtistsManager() {
     e.preventDefault();
     try {
       if (modalMode === "add") {
-        const { data, error } = await supabase
-          .from('artists')
-          .insert([{
-            name: formData.name,
-            role: formData.role,
-            gender: formData.gender,
-            image_url: formData.image_url || `https://ui-avatars.com/api/?name=${formData.name}&background=random`,
-            bio: formData.bio || '',
-            status: formData.status ?? true
-          }])
-          .select();
-
-        if (error) throw error;
-        if (data) setArtists([data[0], ...artists]);
+        const artist: Artist = {
+          id: `local-${Date.now()}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          name: formData.name || "",
+          role: formData.role || "Single",
+          gender: formData.gender || "N/A",
+          image_url: formData.image_url || `https://ui-avatars.com/api/?name=${formData.name}&background=random`,
+          bio: formData.bio || "",
+          status: formData.status ?? true,
+        };
+        setArtists([artist, ...artists]);
       } else if (modalMode === "edit" && selectedArtist) {
-        const { error } = await supabase
-          .from('artists')
-          .update({
-            name: formData.name,
-            role: formData.role,
-            gender: formData.gender,
-            image_url: formData.image_url,
-            bio: formData.bio,
-            status: formData.status,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', selectedArtist.id);
-
-        if (error) throw error;
         setArtists(artists.map(a => 
           a.id === selectedArtist.id ? { ...a, ...formData, updated_at: new Date().toISOString() } as Artist : a
         ));
@@ -147,15 +126,6 @@ export default function ArtistsManager() {
       const artist = artists.find(a => a.id === id);
       if (!artist) return;
 
-      const { error } = await supabase
-        .from('artists')
-        .update({ 
-          status: !artist.status,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      if (error) throw error;
       setArtists(artists.map(a => 
         a.id === id ? { ...a, status: !a.status, updated_at: new Date().toISOString() } : a
       ));

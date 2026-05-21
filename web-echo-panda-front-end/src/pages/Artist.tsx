@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "../backend/supabaseClient";
+import { getDerivedArtists } from "../backend/catalogService";
 import { useDataCache } from "../contexts/DataCacheContext";
 import AppFooter from "./home/AppFooter";
 import HeroBanner from "./artist/HeroBanner";
@@ -13,12 +13,12 @@ import { FaSpinner } from "react-icons/fa";
 interface Artist {
   id: string;
   name: string;
-  image_url: string;
-  bio: string;
-  gender: string;
-  role: string;
-  status: boolean;
-  created_at: string;
+  image_url?: string;
+  bio?: string;
+  gender?: string;
+  role?: string;
+  status?: boolean;
+  created_at?: string;
 }
 
 const Artist: React.FC = () => {
@@ -41,17 +41,12 @@ const Artist: React.FC = () => {
       const data = await getCachedData(`artist_${artistId}`, async () => {
         const startTime = performance.now();
         console.log(`🔄 [Artist] Fetching artist ${artistId}...`);
-        
-        const { data: artistData, error } = await supabase
-          .from('artists')
-          .select('*')
-          .eq('id', artistId)
-          .single();
+
+        const artists = await getDerivedArtists(500);
+        const artistData = artists.find((a) => a.id === artistId) || artists.find((a) => encodeURIComponent(a.name) === artistId) || null;
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Artist] Artist fetched in ${fetchTime.toFixed(0)}ms`);
-
-        if (error) throw error;
 
         return artistData;
       });

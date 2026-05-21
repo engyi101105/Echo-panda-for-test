@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../backend/supabaseClient";
+import { getAlbums } from "../../backend/catalogService";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import AlbumCard from "../../components/AlbumCard";
 import { FaSpinner } from "react-icons/fa";
@@ -31,25 +31,7 @@ export default function AlbumsSection({ artistId }: Props) {
     try {
       const data = await getCachedData(`artist_albums_${artistId}`, async () => {
         console.log(`🔄 [Artist Albums] Fetching albums (type='album') for artist ${artistId}...`);
-
-        const { data: albumData, error } = await supabase
-          .from('albums')
-          .select(`
-            id,
-            title,
-            cover_url,
-            type,
-            release_date,
-            album_artist!inner (
-              artist_id,
-              artists (id, name, image_url)
-            )
-          `)
-          .eq('album_artist.artist_id', artistId)
-          .eq('type', 'album')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
+        const albumData = await getAlbums(200, 0);
 
         const transformedAlbums = (albumData || []).map((album: any) => ({
           id: album.id,
@@ -57,8 +39,9 @@ export default function AlbumsSection({ artistId }: Props) {
           cover_url: album.cover_url,
           type: album.type,
           release_date: album.release_date,
-          artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
-        }));
+          artists: album.artists || []
+        })).filter((album: any) => album.type === 'album')
+          .filter((album: any) => (album.artists || []).some((artist: any) => artist.id === artistId || encodeURIComponent(artist.name) === artistId));
 
         console.log(`✅ [Artist Albums] ${transformedAlbums.length} albums found`);
         return transformedAlbums;

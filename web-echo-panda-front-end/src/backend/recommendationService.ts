@@ -1,94 +1,57 @@
-import { supabase } from "./supabaseClient";
-
-export interface ArtistRef {
-  id: string;
-  name: string;
-  image_url?: string;
-}
+import { getSongs } from "./catalogService";
 
 export interface AlbumRef {
   id: string;
   title: string;
   cover_url?: string;
+  artists?: Array<{ id: string; name: string; image_url?: string }>;
   type?: string;
-  release_date?: string;
-  artists?: ArtistRef[];
 }
 
-export async function getRecommendationsForInterests(
-  interests: string[],
-  max = 8
-): Promise<AlbumRef[]> {
-  const names = (interests || [])
-    .map((n) => (typeof n === "string" ? n.trim() : ""))
-    .filter((n) => n.length > 0);
+const normalize = (value: string) => value.trim().toLowerCase();
 
-  // Helper to map raw album rows into UI-ready album objects
-  const mapAlbums = (albumsData: any[]): AlbumRef[] =>
-    (albumsData || []).map((album: any) => ({
-      id: album.id,
-      title: album.title,
-      cover_url: album.cover_url,
-      type: album.type,
-      release_date: album.release_date,
-      artists:
-        album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || [],
-    }));
+export async function getRecommendationsForInterests(interests: string[]): Promise<AlbumRef[]> {
+  const songs = await getSongs(500);
 
-  // If no interests, fall back to recent albums
-  if (names.length === 0) {
-    const { data, error } = await supabase
-      .from("albums")
-      .select(
-        `id, title, cover_url, type, release_date,
-         album_artist(artists(id, name, image_url))`
-      )
-      .order("created_at", { ascending: false })
-      .limit(Math.max(1, max));
+  const allAlbumsMap = new Map<string, AlbumRef>();
+  songs.forEach((song) => {
+    if (!song.album) return;
 
-    if (error) throw error;
-    return mapAlbums(data || []);
+    const existing = allAlbumsMap.get(song.album.id);
+    if (!existing) {
+      allAlbumsMap.set(song.album.id, {
+        id: song.album.id,
+        title: song.album.title,
+        cover_url: song.album.cover_url,
+        artists: song.artists || [],
+        type: "album",
+      });
+    }
+  });
+
+  const albums = Array.from(allAlbumsMap.values());
+  if (albums.length === 0) return [];
+
+  const wanted = new Set((interests || []).map(normalize).filter(Boolean));
+  if (wanted.size === 0) return albums.slice(0, 12);
+
+  const matches = albums.filter((album) => {
+    const title = normalize(album.title || "");
+    const artists = (album.artists || []).map((a) => normalize(a.name)).join(" ");
+
+    for (const token of wanted) {
+      if (title.includes(token) || artists.includes(token)) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+
+  if (matches.length > 0) {
+    return matches.slice(0, 12);
   }
 
-  // Find matching category IDs by name
-  const { data: categoryData, error: catError } = await supabase
-    .from("categories")
-    .select("id, name")
-    .in("name", names);
-
-  if (catError) throw catError;
-
-  const categoryIds: string[] = (categoryData || []).map((c: any) => c.id);
-  const albumIdSet = new Set<string>();
-
-  // Get album IDs linked to selected categories
-  if (categoryIds.length > 0) {
-    const { data, error } = await supabase
-      .from("album_category")
-      .select("album_id")
-      .in("category_id", categoryIds);
-    if (error) throw error;
-    (data || []).forEach((row: any) => albumIdSet.add(row.album_id));
-  }
-
-  let albumsQuery = supabase
-    .from("albums")
-    .select(
-      `id, title, cover_url, type, release_date,
-       album_artist(artists(id, name, image_url))`
-    );
-
-  if (albumIdSet.size > 0) {
-    albumsQuery = albumsQuery.in("id", Array.from(albumIdSet));
-  } else {
-    // No direct matches, return a sensible fallback
-    albumsQuery = albumsQuery.order("created_at", { ascending: false });
-  }
-
-  const { data: albumsData, error: albumsError } = await albumsQuery.limit(
-    Math.max(1, max)
-  );
-  if (albumsError) throw albumsError;
-
-  return mapAlbums(albumsData || []);
+  // Fallback when interest labels do not directly match titles/artists.
+  return albums.slice(0, 12);
 }

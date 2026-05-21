@@ -3,8 +3,8 @@ import {
   FaTimes, FaMusic, FaClock, FaMicrophone, 
   FaCompactDisc, FaSpinner, FaImage, FaUpload
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { uploadToR2, generateFileKey, deleteFromR2 } from "../../backend/r2Client";
+import { createSong, updateSong } from "../../backend/adminApi";
 
 interface Artist {
   id: string;
@@ -23,6 +23,7 @@ interface Song {
   title: string;
   duration: number;
   album_id: string | null;
+  track_number?: number;
   audio_url: string;
   songCover_url: string;
   created_at: string;
@@ -152,6 +153,11 @@ export default function SongModal({
       return;
     }
 
+    if (!formData.album_id) {
+      alert('Please select an album');
+      return;
+    }
+
     try {
       setUploading(true);
       let coverUrl = formData.songCover_url || '';
@@ -194,96 +200,27 @@ export default function SongModal({
       }
 
       if (editingSong) {
-        // Update song
-        const { error: updateError } = await supabase
-          .from('songs')
-          .update({
-            title: formData.title,
-            duration: formData.duration,
-            album_id: formData.album_id || null,
-            audio_url: audioUrl,
-            songCover_url: coverUrl,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', editingSong.id);
-
-        if (updateError) {
-          console.error('❌ Update error details:', updateError);
-          console.error('Error message:', updateError.message);
-          console.error('Error code:', updateError.code);
-          alert(`Failed to update song: ${updateError.message}`);
-          throw updateError;
-        }
+        await updateSong(editingSong.id, {
+          title: formData.title || '',
+          duration: formData.duration || 1,
+          album_id: String(formData.album_id || ''),
+          artist: allArtists.find((artist) => selectedArtistIds.includes(artist.id))?.name || 'Unknown Artist',
+          track_number: editingSong.track_number || 1,
+          s3_audio_url: audioUrl,
+        });
 
         console.log('✅ Song updated successfully');
-
-        // Delete existing artist relationships
-        await supabase
-          .from('song_artist')
-          .delete()
-          .eq('song_id', editingSong.id);
-
-        // Insert new artist relationships
-        if (selectedArtistIds.length > 0) {
-          const artistRelations = selectedArtistIds.map(artistId => ({
-            song_id: editingSong.id,
-            artist_id: artistId,
-            primary_artist: true
-          }));
-
-          const { error: artistError } = await supabase
-            .from('song_artist')
-            .insert(artistRelations);
-            
-          if (artistError) {
-            console.error('❌ Artist relationship error:', artistError);
-            alert(`Failed to add artists: ${artistError.message}`);
-            throw artistError;
-          }
-        }
       } else {
-        // Insert new song
-        const { data: newSong, error: insertError } = await supabase
-          .from('songs')
-          .insert([{
-            title: formData.title,
-            duration: formData.duration || 0,
-            album_id: formData.album_id || null,
-            audio_url: audioUrl,
-            songCover_url: coverUrl
-          }])
-          .select()
-          .single();
+        await createSong({
+          title: formData.title || '',
+          duration: formData.duration || 1,
+          album_id: String(formData.album_id || ''),
+          artist: allArtists.find((artist) => selectedArtistIds.includes(artist.id))?.name || 'Unknown Artist',
+          track_number: 1,
+          s3_audio_url: audioUrl,
+        });
 
-        if (insertError) {
-          console.error('❌ Insert error details:', insertError);
-          console.error('Error message:', insertError.message);
-          console.error('Error code:', insertError.code);
-          console.error('Error details:', insertError.details);
-          alert(`Failed to insert song: ${insertError.message}`);
-          throw insertError;
-        }
-
-        console.log('✅ Song inserted successfully:', newSong);
-
-        // Insert artist relationships
-        if (selectedArtistIds.length > 0) {
-          const artistRelations = selectedArtistIds.map(artistId => ({
-            song_id: newSong.id,
-            artist_id: artistId,
-            primary_artist: true
-          }));
-
-          const { error: artistError } = await supabase
-            .from('song_artist')
-            .insert(artistRelations);
-            
-          if (artistError) {
-            console.error('❌ Artist relationship error:', artistError);
-            alert(`Failed to add artists: ${artistError.message}`);
-            throw artistError;
-          }
-        }
+        console.log('✅ Song inserted successfully');
       }
 
       onSave();

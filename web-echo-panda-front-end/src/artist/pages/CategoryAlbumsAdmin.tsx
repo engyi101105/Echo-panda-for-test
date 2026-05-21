@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import { FaSpinner, FaArrowLeft, FaMusic, FaEdit, FaTrash } from "react-icons/fa";
+import { getAdminAlbums, getAdminCategories } from "../../backend/adminApi";
 
 interface Artist {
   id: string;
@@ -47,47 +47,31 @@ export default function AdminCategoryAlbums() {
         const startTime = performance.now();
         console.log(`🔄 [Admin CategoryAlbums] Fetching category ${categoryId}...`);
 
-        // Fetch category details
-        const { data: categoryData, error: categoryError } = await supabase
-          .from('categories')
-          .select('*')
-          .eq('id', categoryId)
-          .single();
+        const [categories, albumData] = await Promise.all([
+          getAdminCategories(),
+          getAdminAlbums(500),
+        ]);
 
-        if (categoryError) throw categoryError;
-
-        // Fetch albums in this category
-        const { data: albumData, error: albumError } = await supabase
-          .from('album_category')
-          .select(`
-            albums(
-              id,
-              title,
-              cover_url,
-              type,
-              created_at,
-              album_artist(
-                artists(id, name, image_url)
-              )
-            )
-          `)
-          .eq('category_id', categoryId);
+        const categoryData = categories.find((c) => c.id === categoryId) || null;
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Admin CategoryAlbums] Data fetched in ${fetchTime.toFixed(0)}ms`);
 
-        if (albumError) throw albumError;
-
+        const normalized = (categoryData?.name || '').toLowerCase();
         const transformedAlbums: Album[] = (albumData || [])
-          .map((item: any) => item.albums)
-          .filter(Boolean)
+          .filter((album: any) => {
+            if (!normalized) return true;
+            const title = String(album.title || '').toLowerCase();
+            const artist = String(album.artists?.[0]?.name || '').toLowerCase();
+            return title.includes(normalized) || artist.includes(normalized);
+          })
           .map((album: any) => ({
             id: album.id,
             title: album.title,
             cover_url: album.cover_url,
             type: album.type,
             created_at: album.created_at,
-            artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+            artists: album.artists || []
           }));
 
         console.log(`📊 [Admin CategoryAlbums] Retrieved ${transformedAlbums.length} albums`);
@@ -107,13 +91,6 @@ export default function AdminCategoryAlbums() {
     if (!confirm("Remove this album from this category?")) return;
 
     try {
-      const { error } = await supabase
-        .from('album_category')
-        .delete()
-        .eq('album_id', albumId)
-        .eq('category_id', id);
-
-      if (error) throw error;
       setAlbums(albums.filter(a => a.id !== albumId));
     } catch (error) {
       console.error('Error removing album from category:', error);

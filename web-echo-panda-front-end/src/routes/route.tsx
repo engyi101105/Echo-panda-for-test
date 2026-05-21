@@ -1,23 +1,31 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, useParams } from "react-router-dom";
 import HomeLayout from "../layouts/HomeLayout";
 import AuthLayout from "../layouts/AuthLayout";
 import { routeConfig } from "./routeConfig";
 
-import AdminLayout from "../admin/AdminLayout";
-import ProtectedAdminRoute from "../admin/ProtectedAdminRoute";
-import Dashboard from "../admin/pages/Dashboard";
-import Admins from "../admin/pages/Admins";
-import Users from "../admin/pages/Users";
-import Songs from "../admin/pages/Songs";
-import Categories from "../admin/pages/Categories";
-import Artists from "../admin/pages/Artists";
-import Favorites from "../admin/pages/Favorites";
-import Albums from "../admin/pages/Albums";
-import AdminSettings from "../admin/pages/AdminSettings";
-import AdminLogin from "../admin/pages/AdminLogin";
-import AdminCategoryAlbums from "../admin/pages/CategoryAlbumsAdmin";
-import Tags from "../admin/pages/Tags";
-import TagAlbums from "../admin/pages/TagAlbums";
+import ArtistLayout from "../artist/ArtistLayout";
+import ProtectedAdminRoute from "../artist/ProtectedAdminRoute";
+import Dashboard from "../artist/pages/Dashboard";
+import Users from "../artist/pages/Users";
+import Songs from "../artist/pages/Songs";
+import Categories from "../artist/pages/Categories";
+import Artists from "../artist/pages/Artists";
+import Favorites from "../artist/pages/Favorites";
+import Albums from "../artist/pages/Albums";
+import ArtistSettings from "../artist/pages/ArtistSettings";
+import AdminCategoryAlbums from "../artist/pages/CategoryAlbumsAdmin";
+import Tags from "../artist/pages/Tags";
+import TagAlbums from "../artist/pages/TagAlbums";
+
+function RedirectCategoryAlbum() {
+  const { id } = useParams();
+  return <Navigate to={`/artist/category-album/${id ?? ""}`} replace />;
+}
+
+function RedirectTagAlbums() {
+  const { tagId } = useParams();
+  return <Navigate to={`/artist/tag-albums/${tagId ?? ""}`} replace />;
+}
 
 // Get main routes (menu, library, playlist, general) for HomeLayout
 const mainRoutes = routeConfig.filter(
@@ -53,32 +61,41 @@ const router = createBrowserRouter([
       element: route.component ? <route.component /> : null,
     })),
   },
-  // Admin login route (no layout)
-  {
-    path: "/admin/login",
-    element: <AdminLogin />,
-  },
-  // Admin routes with AdminLayout (Protected)
+  // Artist dashboard routes with ArtistLayout (Protected)
   {
     element: (
       <ProtectedAdminRoute>
-        <AdminLayout />
+        <ArtistLayout />
       </ProtectedAdminRoute>
     ),
     children: [
-      { path: "/admin", element: <Navigate to="/admin/dashboard" replace /> },
-      { path: "/admin/dashboard", element: <Dashboard /> },
-      { path: "/admin/admins", element: <Admins /> },
-      { path: "/admin/users", element: <Users /> },
-      { path: "/admin/songs", element: <Songs /> },
-      { path: "/admin/categories", element: <Categories /> },
-      { path: "/admin/artists", element: <Artists /> },
-      { path: "/admin/favorites", element: <Favorites /> },
-      { path: "/admin/albums", element: <Albums /> },
-      { path: "/admin/settings", element: <AdminSettings /> },
-      { path: "/admin/CategoryAlbum/:id", element: <AdminCategoryAlbums /> },
-      { path: "/admin/tags", element: <Tags /> },
-      { path: "/admin/tag-albums/:tagId", element: <TagAlbums /> }
+      { path: "/artist", element: <Navigate to="/artist/dashboard" replace /> },
+      { path: "/artist/dashboard", element: <Dashboard /> },
+      { path: "/artist/admins", element: <Navigate to="/artist/artists" replace /> },
+      { path: "/artist/users", element: <Users /> },
+      { path: "/artist/songs", element: <Songs /> },
+      { path: "/artist/categories", element: <Categories /> },
+      { path: "/artist/artists", element: <Artists /> },
+      { path: "/artist/favorites", element: <Favorites /> },
+      { path: "/artist/albums", element: <Albums /> },
+      { path: "/artist/settings", element: <ArtistSettings /> },
+      { path: "/artist/category-album/:id", element: <AdminCategoryAlbums /> },
+      { path: "/artist/tags", element: <Tags /> },
+      { path: "/artist/tag-albums/:tagId", element: <TagAlbums /> },
+
+      { path: "/admin", element: <Navigate to="/artist/dashboard" replace /> },
+      { path: "/admin/dashboard", element: <Navigate to="/artist/dashboard" replace /> },
+      { path: "/admin/admins", element: <Navigate to="/artist/admins" replace /> },
+      { path: "/admin/users", element: <Navigate to="/artist/users" replace /> },
+      { path: "/admin/songs", element: <Navigate to="/artist/songs" replace /> },
+      { path: "/admin/categories", element: <Navigate to="/artist/categories" replace /> },
+      { path: "/admin/artists", element: <Navigate to="/artist/artists" replace /> },
+      { path: "/admin/favorites", element: <Navigate to="/artist/favorites" replace /> },
+      { path: "/admin/albums", element: <Navigate to="/artist/albums" replace /> },
+      { path: "/admin/settings", element: <Navigate to="/artist/settings" replace /> },
+      { path: "/admin/CategoryAlbum/:id", element: <RedirectCategoryAlbum /> },
+      { path: "/admin/tags", element: <Navigate to="/artist/tags" replace /> },
+      { path: "/admin/tag-albums/:tagId", element: <RedirectTagAlbums /> }
 
     ],
   },

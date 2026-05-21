@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../backend/supabaseClient";
 import { useDataCache } from "../contexts/DataCacheContext";
 import { FaSpinner, FaMusic, FaPlus } from "react-icons/fa";
 import Song from "../components/Song";

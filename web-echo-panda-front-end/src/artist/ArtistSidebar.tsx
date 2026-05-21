@@ -19,16 +19,16 @@ interface MenuItem {
 }
 
 const menus: MenuItem[] = [
-  { name: "Dashboard", path: "/admin/dashboard", icon: <FaChartLine /> },
-  { name: "Admins", path: "/admin/admins", icon: <FaShieldAlt /> },
-  { name: "Users", path: "/admin/users", icon: <FaUsers /> },
-  { name: "Favorites", path: "/admin/favorites", icon: <FaRegHeart /> },
-  { name: "Artists", path: "/admin/artists", icon: <FaMusic /> },
-  { name: "Songs", path: "/admin/songs", icon: <FaCompactDisc /> },
-  { name: "Categories", path: "/admin/categories", icon: <FaTags /> },
-  { name: "Albums", path: "/admin/albums", icon: <FaListUl /> },
-  { name: "Tags", path: "/admin/tags", icon: <FaBookmark /> },
-  { name: "Settings", path: "/admin/settings", icon: <FaCog /> },
+  { name: "Dashboard", path: "/artist/dashboard", icon: <FaChartLine /> },
+  { name: "Artists", path: "/artist/admins", icon: <FaShieldAlt /> },
+  { name: "Users", path: "/artist/users", icon: <FaUsers /> },
+  { name: "Favorites", path: "/artist/favorites", icon: <FaRegHeart /> },
+  { name: "Artists", path: "/artist/artists", icon: <FaMusic /> },
+  { name: "Songs", path: "/artist/songs", icon: <FaCompactDisc /> },
+  { name: "Categories", path: "/artist/categories", icon: <FaTags /> },
+  { name: "Albums", path: "/artist/albums", icon: <FaListUl /> },
+  { name: "Tags", path: "/artist/tags", icon: <FaBookmark /> },
+  { name: "Settings", path: "/artist/settings", icon: <FaCog /> },
 ];
 
 export default function AdminSidebar() {
@@ -80,7 +80,7 @@ export default function AdminSidebar() {
       <div className="p-4 border-t border-purple-500/30 bg-slate-950/50">
         <div className="text-xs text-slate-400 text-center">
           <p className="text-purple-400 font-semibold">Echo Panda</p>
-          <p>Admin Panel Management</p>
+          <p>Artist Panel Management</p>
         </div>
       </div>
     </aside>

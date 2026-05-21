@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../../backend/supabaseClient";
+import { getAlbums } from "../../backend/catalogService";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import AlbumCard from "../../components/AlbumCard";
 import { FaSpinner } from "react-icons/fa";
@@ -36,37 +36,21 @@ export default function AlbumGrid() {
       const data = await getCachedData('album_grid', async () => {
         const startTime = performance.now();
         console.log('🔄 [AlbumGrid] Fetching albums...');
-        
-        const { data: albumsData, error } = await supabase
-          .from('albums')
-          .select(`
-            id,
-            title,
-            cover_url,
-            type,
-            release_date,
-            created_at,
-            album_artist(
-              artists(id, name, image_url)
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(25);
+
+        const albumsData = await getAlbums(25, 0);
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [AlbumGrid] Albums fetched in ${fetchTime.toFixed(0)}ms`);
         console.log(`📊 [AlbumGrid] Retrieved ${albumsData?.length || 0} albums`);
 
-        if (error) throw error;
-
         const transformedAlbums: Album[] = (albumsData || []).map((album: any) => ({
           id: album.id,
           title: album.title,
-          cover_url: album.cover_url,
+          cover_url: album.cover_url || "",
           type: album.type,
-          release_date: album.release_date,
-          created_at: album.created_at,
-          artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+          release_date: album.release_date || "",
+          created_at: album.release_date || new Date().toISOString(),
+          artists: album.artists || []
         }));
 
         return transformedAlbums;

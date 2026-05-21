@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../backend/supabaseClient";
 import { useDataCache } from "../contexts/DataCacheContext";
 import { FaSpinner, FaMusic, FaPlus } from "react-icons/fa";
 import Song from "../components/Song";
 import { getUserPlaylists, createPlaylist, addSongToPlaylist, isSongInPlaylist, type Playlist } from "../backend/playlistsService";
 import { trackSongPlay } from "../backend/playTrackingService";
 import { useAudioPlayer } from "../contexts/AudioPlayerContext";
+import { getSongs } from "../backend/catalogService";
 
 interface Artist {
   id: string;
@@ -65,30 +65,11 @@ const RecentlyAdded: React.FC = () => {
       const data = await getCachedData('recently_added_songs', async () => {
         const startTime = performance.now();
         console.log('🔄 [RecentlyAdded] Fetching songs...');
-        
-        const { data: songsData, error } = await supabase
-        .from('songs')
-        .select(`
-          id,
-          title,
-          duration,
-          album_id,
-          audio_url,
-          songCover_url,
-          created_at,
-          song_artist(
-            artists(id, name, image_url)
-          ),
-          albums(id, title, cover_url)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(25);
+        const songsData = await getSongs(25);
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [RecentlyAdded] Songs fetched in ${fetchTime.toFixed(0)}ms`);
         console.log(`📊 [RecentlyAdded] Retrieved ${songsData?.length || 0} songs`);
-
-        if (error) throw error;
 
         const transformedSongs: Song[] = (songsData || []).map((song: any) => ({
           id: song.id,
@@ -98,8 +79,8 @@ const RecentlyAdded: React.FC = () => {
           audio_url: song.audio_url,
           songCover_url: song.songCover_url,
           created_at: song.created_at,
-          artists: song.song_artist?.map((sa: any) => sa.artists).filter(Boolean) || [],
-          album: song.albums || null
+          artists: song.artists || [],
+          album: song.album || null
         }));
 
         return transformedSongs;

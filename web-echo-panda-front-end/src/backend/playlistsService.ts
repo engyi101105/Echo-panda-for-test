@@ -1,4 +1,6 @@
-import { supabase } from "./supabaseClient";
+const viteEnv = (import.meta as any).env || {};
+const BACKEND_API_BASE_URL =
+  viteEnv.VITE_BACKEND_API_URL || "http://localhost:8082/api";
 
 export interface Playlist {
   id: string;
@@ -9,45 +11,53 @@ export interface Playlist {
   song_count?: number;
 }
 
-// Get current user UID from localStorage
-const getCurrentUserUID = (): string | null => {
-  const user = localStorage.getItem("user");
-  if (!user) return null;
-  try {
-    const userData = JSON.parse(user);
-    return userData.uid || null;
-  } catch {
-    return null;
+const getBackendToken = (): string | null => {
+  return localStorage.getItem("userToken") || localStorage.getItem("authToken");
+};
+
+const backendRequest = async <T = any>(
+  path: string,
+  init: RequestInit = {}
+): Promise<T> => {
+  const token = getBackendToken();
+
+  if (!token) {
+    throw new Error("Missing backend auth token");
   }
+
+  const response = await fetch(`${BACKEND_API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(init.headers || {}),
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.message || `Request failed with ${response.status}`);
+  }
+
+  return data as T;
 };
 
 // Get all playlists for current user
 export const getUserPlaylists = async (): Promise<Playlist[]> => {
-  const uid = getCurrentUserUID();
-  if (!uid) return [];
+  if (!getBackendToken()) return [];
 
   try {
-    const { data, error } = await supabase
-      .from("playlists")
-      .select(`
-        id,
-        user_id,
-        name,
-        created_at,
-        updated_at,
-        playlist_song(count)
-      `)
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false });
+    const result = await backendRequest<{ data: any[] }>("/playlists");
 
-    if (error) {
-      console.error("Error fetching playlists:", error);
-      return [];
-    }
-
-    return (data || []).map((playlist: any) => ({
-      ...playlist,
-      song_count: playlist.playlist_song?.[0]?.count || 0,
+    return (result?.data || []).map((playlist: any) => ({
+      id: String(playlist.id),
+      user_id: String(playlist.user_id),
+      name: playlist.name,
+      created_at: playlist.created_at,
+      updated_at: playlist.updated_at,
+      song_count: playlist.songs_count || 0,
     }));
   } catch (error) {
     console.error("Error fetching playlists:", error);
@@ -57,29 +67,27 @@ export const getUserPlaylists = async (): Promise<Playlist[]> => {
 
 // Create new playlist
 export const createPlaylist = async (name: string): Promise<Playlist | null> => {
-  const uid = getCurrentUserUID();
-  if (!uid) {
+  if (!getBackendToken()) {
     console.error("User not logged in");
     return null;
   }
 
   try {
-    const { data, error } = await supabase
-      .from("playlists")
-      .insert({
-        user_id: uid,
-        name: name,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error creating playlist:", error);
-      return null;
-    }
+    const result = await backendRequest<{ data: any }>("/playlists", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    const data = result?.data;
 
     console.log(`✅ Playlist "${name}" created`);
-    return data;
+    return {
+      id: String(data.id),
+      user_id: String(data.user_id),
+      name: data.name,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      song_count: 0,
+    };
   } catch (error) {
     console.error("Error creating playlist:", error);
     return null;
@@ -92,34 +100,20 @@ export const addSongToPlaylist = async (
   songId: string
 ): Promise<boolean> => {
   try {
-    // Check if song already exists in playlist
-    const { data: existing } = await supabase
-      .from("playlist_song")
-      .select("*")
-      .eq("playlist_id", playlistId)
-      .eq("song_id", songId)
-      .single();
+    const parsedSongId = Number.parseInt(songId, 10);
+    if (Number.isNaN(parsedSongId)) return false;
 
-    if (existing) {
-      console.log("Song already in playlist");
-      return true;
-    }
-
-    const { error } = await supabase
-      .from("playlist_song")
-      .insert({
-        playlist_id: playlistId,
-        song_id: songId,
-      });
-
-    if (error) {
-      console.error("Error adding song to playlist:", error);
-      return false;
-    }
+    await backendRequest(`/playlists/${playlistId}/songs`, {
+      method: "POST",
+      body: JSON.stringify({ song_id: parsedSongId }),
+    });
 
     console.log(`✅ Song ${songId} added to playlist ${playlistId}`);
     return true;
-  } catch (error) {
+  } catch (error: any) {
+    if ((error?.message || "").toLowerCase().includes("already in playlist")) {
+      return true;
+    }
     console.error("Error adding song to playlist:", error);
     return false;
   }
@@ -131,16 +125,12 @@ export const removeSongFromPlaylist = async (
   songId: string
 ): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from("playlist_song")
-      .delete()
-      .eq("playlist_id", playlistId)
-      .eq("song_id", songId);
+    const parsedSongId = Number.parseInt(songId, 10);
+    if (Number.isNaN(parsedSongId)) return false;
 
-    if (error) {
-      console.error("Error removing song from playlist:", error);
-      return false;
-    }
+    await backendRequest(`/playlists/${playlistId}/songs/${parsedSongId}`, {
+      method: "DELETE",
+    });
 
     console.log(`✅ Song ${songId} removed from playlist ${playlistId}`);
     return true;
@@ -153,36 +143,24 @@ export const removeSongFromPlaylist = async (
 // Get songs in a playlist
 export const getPlaylistSongs = async (playlistId: string): Promise<any[]> => {
   try {
-    const { data, error } = await supabase
-      .from("playlist_song")
-      .select(`
-        song_id,
-        added_at,
-        songs(
-          id,
-          title,
-          duration,
-          songCover_url,
-          album_id,
-          song_artist(
-            artists(id, name, image_url)
-          ),
-          albums(id, title, cover_url)
-        )
-      `)
-      .eq("playlist_id", playlistId)
-      .order("added_at", { ascending: false });
+    const result = await backendRequest<{ data: any[] }>(`/playlists/${playlistId}/songs`);
 
-    if (error) {
-      console.error("Error fetching playlist songs:", error);
-      return [];
-    }
-
-    return (data || []).map((item: any) => ({
-      ...item.songs,
-      added_at: item.added_at,
-      artists: item.songs.song_artist?.map((sa: any) => sa.artists).filter(Boolean) || [],
-      album: item.songs.albums || null,
+    return (result?.data || []).map((song: any) => ({
+      id: String(song.id),
+      title: song.title,
+      duration: song.duration,
+      album_id: song.album_id ? String(song.album_id) : null,
+      audio_url: song.s3_audio_url || null,
+      songCover_url: song.album?.s3_cover_image_url || song.album?.cover_image || null,
+      artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: "" }] : [],
+      album: song.album
+        ? {
+            id: String(song.album.id),
+            title: song.album.title,
+            cover_url: song.album.s3_cover_image_url || song.album.cover_image || null,
+          }
+        : null,
+      added_at: song.pivot?.added_at || song.created_at,
     }));
   } catch (error) {
     console.error("Error fetching playlist songs:", error);
@@ -193,15 +171,9 @@ export const getPlaylistSongs = async (playlistId: string): Promise<any[]> => {
 // Delete playlist
 export const deletePlaylist = async (playlistId: string): Promise<boolean> => {
   try {
-    const { error } = await supabase
-      .from("playlists")
-      .delete()
-      .eq("id", playlistId);
-
-    if (error) {
-      console.error("Error deleting playlist:", error);
-      return false;
-    }
+    await backendRequest(`/playlists/${playlistId}`, {
+      method: "DELETE",
+    });
 
     console.log(`✅ Playlist ${playlistId} deleted`);
     return true;
@@ -217,19 +189,14 @@ export const isSongInPlaylist = async (
   songId: string
 ): Promise<boolean> => {
   try {
-    const { data, error } = await supabase
-      .from("playlist_song")
-      .select("*")
-      .eq("playlist_id", playlistId)
-      .eq("song_id", songId)
-      .single();
+    const parsedSongId = Number.parseInt(songId, 10);
+    if (Number.isNaN(parsedSongId)) return false;
 
-    if (error && error.code !== "PGRST116") {
-      console.error("Error checking playlist:", error);
-      return false;
-    }
+    const result = await backendRequest<{ exists: boolean }>(
+      `/playlists/${playlistId}/songs/${parsedSongId}/exists`
+    );
 
-    return !!data;
+    return !!result?.exists;
   } catch (error) {
     console.error("Error checking playlist:", error);
     return false;

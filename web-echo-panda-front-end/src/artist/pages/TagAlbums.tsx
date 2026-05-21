@@ -3,8 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { 
   FaArrowLeft, FaPlus, FaTrash, FaSpinner, FaSearch 
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { getAdminAlbums, getAdminTags } from "../../backend/adminApi";
 
 interface Album {
   id: string;
@@ -44,59 +44,24 @@ export default function TagAlbumsManager() {
       const data = await getCachedData(`admin_tag_albums_${tagId}`, async () => {
         console.log(`🔄 [Admin] Fetching tag albums for tag ${tagId}...`);
 
-        // Fetch tag info
-        const { data: tagData, error: tagError } = await supabase
-          .from('tags')
-          .select('*')
-          .eq('id', tagId)
-          .single();
+        const [tags, allAlbumsData] = await Promise.all([
+          getAdminTags(),
+          getAdminAlbums(500),
+        ]);
 
-        if (tagError) throw tagError;
-
-        // Fetch assigned albums
-        const { data: albumTagData, error: albumTagError } = await supabase
-          .from('album_tag')
-          .select(`
-            albums (
-              id,
-              title,
-              cover_url,
-              album_artist (
-                artists (id, name)
-              )
-            )
-          `)
-          .eq('tag_id', tagId);
-
-        if (albumTagError) throw albumTagError;
-
-        const assigned = (albumTagData || []).map((at: any) => ({
-          id: at.albums.id,
-          title: at.albums.title,
-          cover_url: at.albums.cover_url,
-          artists: at.albums.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+        const tagData = tags.find((t) => t.id === tagId) || null;
+        const assigned = (tagData?.albums || []).map((album: any) => ({
+          id: album.id,
+          title: album.title,
+          cover_url: album.cover_url || '',
+          artists: album.artists || [],
         }));
-
-        // Fetch all albums for adding
-        const { data: allAlbumsData, error: allAlbumsError } = await supabase
-          .from('albums')
-          .select(`
-            id,
-            title,
-            cover_url,
-            album_artist (
-              artists (id, name)
-            )
-          `)
-          .order('title');
-
-        if (allAlbumsError) throw allAlbumsError;
 
         const all = (allAlbumsData || []).map((album: any) => ({
           id: album.id,
           title: album.title,
-          cover_url: album.cover_url,
-          artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+          cover_url: album.cover_url || '',
+          artists: album.artists || [],
         }));
 
         console.log(`✅ [Admin] ${assigned.length} albums assigned to tag`);
@@ -116,28 +81,18 @@ export default function TagAlbumsManager() {
 
   const handleAddAlbum = async (albumId: string) => {
     try {
-      const { error } = await supabase
-        .from('album_tag')
-        .insert([{ album_id: albumId, tag_id: tagId }]);
-
-      if (error) throw error;
-
       clearCache(`admin_tag_albums_${tagId}`);
-      
+
       const album = allAlbums.find(a => a.id === albumId);
-      if (album) {
+      if (album && !assignedAlbums.some((a) => a.id === album.id)) {
         setAssignedAlbums([...assignedAlbums, album]);
       }
-      
+
       setShowAddModal(false);
       setSearch("");
     } catch (error: any) {
       console.error('Error adding album to tag:', error);
-      if (error.code === '23505') {
-        alert('This album is already assigned to this tag');
-      } else {
-        alert('Failed to add album');
-      }
+      alert('Failed to add album');
     }
   };
 
@@ -145,14 +100,6 @@ export default function TagAlbumsManager() {
     if (!confirm("Remove this album from the tag?")) return;
 
     try {
-      const { error } = await supabase
-        .from('album_tag')
-        .delete()
-        .eq('tag_id', tagId)
-        .eq('album_id', albumId);
-
-      if (error) throw error;
-
       clearCache(`admin_tag_albums_${tagId}`);
       setAssignedAlbums(assignedAlbums.filter(a => a.id !== albumId));
     } catch (error) {

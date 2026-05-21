@@ -4,8 +4,9 @@ import {
   FaRedo, FaRandom, FaVolumeUp, FaVolumeDown, FaVolumeMute
 } from 'react-icons/fa';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
-import { searchContent } from '../backend/searchService';
-import { supabase } from '../backend/supabaseClient';
+
+const viteEnv = (import.meta as any).env || {};
+const BACKEND_API_BASE_URL = viteEnv.VITE_BACKEND_API_URL || 'http://localhost:8082/api';
 
 const Player: React.FC = () => {
   const {
@@ -85,27 +86,31 @@ const Player: React.FC = () => {
       try {
         console.log('🎵 Fetching random songs from database');
         
-        // Fetch all songs from database
-        const { data: allSongs, error } = await supabase
-          .from('songs')
-          .select('id, title, audio_url, songCover_url, album_id')
-          .not('audio_url', 'is', null)
-          .limit(100);
+        const response = await fetch(`${BACKEND_API_BASE_URL}/songs?per_page=100`, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+        });
 
-        if (error) {
-          console.error('❌ Error fetching songs:', error);
-          return;
+        if (!response.ok) {
+          throw new Error(`Failed to fetch songs: ${response.status}`);
         }
+
+        const json = await response.json();
+        const allSongs = Array.isArray(json?.data) ? json.data : [];
 
         if (allSongs && allSongs.length > 0) {
           // Convert to audio player format
-          const randomSongs = allSongs.map((song: any) => ({
-            id: String(song.id),
-            title: song.title || 'Unknown Song',
-            artist: 'Random Song',
-            coverUrl: song.songCover_url || '',
-            audioUrl: song.audio_url || '',
-          }));
+          const randomSongs = allSongs
+            .map((song: any) => ({
+              id: String(song.id),
+              title: song.title || 'Unknown Song',
+              artist: song.artist || song.album?.artist || 'Unknown Artist',
+              coverUrl: song.album?.s3_cover_image_url || song.album?.cover_image || '',
+              audioUrl: song.s3_audio_url || '',
+            }))
+            .filter((song: any) => !!song.audioUrl);
 
           console.log('✅ Loaded random songs:', randomSongs.length);
           setSongQueue(randomSongs);

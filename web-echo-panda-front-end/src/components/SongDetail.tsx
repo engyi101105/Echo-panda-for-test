@@ -7,10 +7,12 @@ import {
   FaUser, FaCompactDisc, FaTimes, FaFolder, FaMusic, FaCheck, FaSpinner
 } from 'react-icons/fa';
 import Song from './Song';
-import { supabase } from '../backend/supabaseClient';
 import { getUserPlaylists, createPlaylist, addSongToPlaylist, isSongInPlaylist, type Playlist } from '../backend/playlistsService';
 import { trackSongPlay } from '../backend/playTrackingService';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
+
+const viteEnv = (import.meta as any).env || {};
+const BACKEND_API_BASE_URL = viteEnv.VITE_BACKEND_API_URL || 'http://localhost:8082/api';
 
 // --- Types ---
 interface Artist {
@@ -252,93 +254,55 @@ const SongDetails: React.FC = () => {
   const fetchSongAndAlbum = async () => {
     try {
       setLoading(true);
-      
-      // Fetch current song with album and artists
-      const { data: songData, error: songError } = await supabase
-        .from('songs')
-        .select(`
-          id,
-          title,
-          duration,
-          album_id,
-          audio_url,
-          songCover_url,
-          created_at,
-          albums (
-            id,
-            title,
-            cover_url,
-            release_date
-          ),
-          song_artist (
-            artists (
-              id,
-              name,
-              image_url
-            )
-          )
-        `)
-        .eq('id', id)
-        .single();
 
-      if (songError) throw songError;
+      const songRes = await fetch(`${BACKEND_API_BASE_URL}/songs/${id}`, {
+        headers: { Accept: 'application/json' },
+      });
 
-      // Transform the data
-      const album = Array.isArray(songData.albums) ? songData.albums[0] : songData.albums;
+      if (!songRes.ok) throw new Error(`Failed to fetch song ${id}`);
+      const songData = await songRes.json();
+
+      const album = songData.album;
       
       const transformedSong: SongData = {
         id: songData.id,
         title: songData.title,
         duration: songData.duration,
         album_id: songData.album_id,
-        audio_url: songData.audio_url,
-        songCover_url: songData.songCover_url,
+        audio_url: songData.s3_audio_url || null,
+        songCover_url: songData.album?.s3_cover_image_url || songData.album?.cover_image || null,
         created_at: songData.created_at,
         album: album ? {
           id: album.id,
           title: album.title,
-          cover_url: album.cover_url,
+          cover_url: album.s3_cover_image_url || album.cover_image,
           release_date: album.release_date
         } : undefined,
-        artists: songData.song_artist?.map((sa: any) => sa.artists) || []
+        artists: songData.artist ? [{ id: String(songData.id), name: songData.artist, image_url: '' }] : []
       };
 
       setCurrentSong(transformedSong);
 
       // Fetch all songs from the same album
       if (songData.album_id) {
-        const { data: albumSongsData, error: albumError } = await supabase
-          .from('songs')
-          .select(`
-            id,
-            title,
-            duration,
-            album_id,
-            audio_url,
-            songCover_url,
-            created_at,
-            song_artist (
-              artists (
-                id,
-                name,
-                image_url
-              )
-            )
-          `)
-          .eq('album_id', songData.album_id)
-          .order('created_at', { ascending: true });
+        const albumSongsRes = await fetch(
+          `${BACKEND_API_BASE_URL}/songs?album_id=${songData.album_id}&per_page=200`,
+          { headers: { Accept: 'application/json' } }
+        );
 
-        if (albumError) throw albumError;
+        if (!albumSongsRes.ok) throw new Error('Failed to fetch album songs');
+        const albumSongsJson = await albumSongsRes.json();
+        const albumSongsData = Array.isArray(albumSongsJson?.data) ? albumSongsJson.data : [];
 
         const transformedAlbumSongs: SongData[] = (albumSongsData || []).map((song: any) => ({
           id: song.id,
           title: song.title,
           duration: song.duration,
           album_id: song.album_id,
-          audio_url: song.audio_url,
-          songCover_url: song.songCover_url,
+          audio_url: song.s3_audio_url || null,
+          songCover_url: transformedSong.album?.cover_url || null,
           created_at: song.created_at,
-          artists: song.song_artist?.map((sa: any) => sa.artists) || []
+          artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: '' }] : []
         }));
 
         setAlbumSongs(transformedAlbumSongs);

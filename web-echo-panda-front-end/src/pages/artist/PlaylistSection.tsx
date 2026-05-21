@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../backend/supabaseClient";
+import { getUserPlaylists } from "../../backend/playlistsService";
+import { getSongs } from "../../backend/catalogService";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import AlbumCard from "../../components/AlbumCard";
 import { FaSpinner } from "react-icons/fa";
@@ -30,36 +31,12 @@ export default function PlaylistSection({ artistId }: Props) {
       const data = await getCachedData(`artist_playlists_${artistId}`, async () => {
         console.log(`🔄 [Artist Playlists] Fetching playlists for artist ${artistId}...`);
 
-        // Get playlists that contain songs by this artist
-        const { data: playlistData, error } = await supabase
-          .from('playlists')
-          .select(`
-            id,
-            name,
-            user_id,
-            created_at,
-            playlist_song (
-              songs (
-                song_artist (
-                  artist_id
-                )
-              )
-            )
-          `);
+        const [playlists, songs] = await Promise.all([getUserPlaylists(), getSongs(400)]);
+        const hasArtistSong = songs.some((song) =>
+          (song.artists || []).some((artist) => artist.id === artistId || encodeURIComponent(artist.name) === artistId)
+        );
 
-        if (error) throw error;
-
-        // Filter playlists that have songs by this artist
-        const filtered = (playlistData || []).filter((playlist: any) => 
-          playlist.playlist_song?.some((ps: any) => 
-            ps.songs?.song_artist?.some((sa: any) => sa.artist_id === artistId)
-          )
-        ).map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          user_id: p.user_id,
-          created_at: p.created_at
-        }));
+        const filtered = hasArtistSong ? playlists : [];
 
         console.log(`✅ [Artist Playlists] ${filtered.length} playlists found`);
         return filtered;

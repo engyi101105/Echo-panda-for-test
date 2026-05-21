@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../../backend/supabaseClient';
+import { getSongs } from '../../backend/catalogService';
 import { useDataCache } from '../../contexts/DataCacheContext';
 import { useAudioPlayer } from '../../contexts/AudioPlayerContext';
 import { FaSpinner } from 'react-icons/fa';
@@ -49,42 +49,31 @@ export default function PopularSongs({ artistId }: Props) {
       const data = await getCachedData(`artist_songs_${artistId}`, async () => {
         const startTime = performance.now();
         console.log(`🔄 [PopularSongs] Fetching songs for artist ${artistId}...`);
-        
-        const { data: songsData, error } = await supabase
-          .from('song_artist')
-          .select(`
-            songs(
-              id,
-              title,
-              duration,
-              audio_url,
-              created_at,
-              albums(id, title, cover_url),
-              song_artist(
-                artists(id, name, image_url)
-              )
-            )
-          `)
-          .eq('artist_id', artistId)
-          .limit(10);
+
+        const allSongs = await getSongs(200);
+        const songsData = allSongs.filter((song) =>
+          (song.artists || []).some((artist) => artist.id === artistId || encodeURIComponent(artist.name) === artistId)
+        );
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [PopularSongs] Songs fetched in ${fetchTime.toFixed(0)}ms`);
         console.log(`📊 [PopularSongs] Retrieved ${songsData?.length || 0} songs`);
 
-        if (error) throw error;
-
         const transformedSongs: SongType[] = (songsData || [])
-          .map((item: any) => item.songs)
-          .filter(Boolean)
           .map((song: any) => ({
             id: song.id,
             title: song.title,
             duration: song.duration,
             audio_url: song.audio_url,
             created_at: song.created_at,
-            album: song.albums,
-            artists: song.song_artist?.map((sa: any) => sa.artists).filter(Boolean) || []
+            album: song.album
+              ? {
+                  id: song.album.id,
+                  title: song.album.title,
+                  cover_url: song.album.cover_url || "",
+                }
+              : undefined,
+            artists: song.artists || []
           }));
 
         return transformedSongs;

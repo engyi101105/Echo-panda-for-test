@@ -28,6 +28,8 @@ class StoreSongRequest extends FormRequest
             'duration' => ['required', 'integer', 'min:1'],
             'track_number' => ['required', 'integer', 'min:1'],
             'lyrics' => ['nullable', 'string'],
+            's3_audio_url' => ['nullable', 'string', 'max:2048'],
+            's3_lyrics_url' => ['nullable', 'string', 'max:2048'],
         ];
     }
 }

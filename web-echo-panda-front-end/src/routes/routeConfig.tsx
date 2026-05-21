@@ -33,28 +33,26 @@ import CategoryAlbums from "../pages/CategoryAlbums";
 
 // Admin 
 import { Navigate } from "react-router-dom";
-import AdminLayout from "../admin/AdminLayout";
-import Dashboard from "../admin/pages/Dashboard";
-import Admins from "../admin/pages/Admins";
-import Users from "../admin/pages/Users";
-import Favorites from "../admin/pages/Favorites";
-import Artists from "../admin/pages/Artists";
-import Songs from "../admin/pages/Songs";
-import Categories from "../admin/pages/Categories";
-import Albums from "../admin/pages/Albums";
-import AdminSettings from "../admin/pages/AdminSettings";
-import AdminLogin from "../admin/pages/AdminLogin";
-import AdminCategoryAlbums from "../admin/pages/CategoryAlbumsAdmin";
+import ArtistLayout from "../artist/ArtistLayout";
+import Dashboard from "../artist/pages/Dashboard";
+import Users from "../artist/pages/Users";
+import Favorites from "../artist/pages/Favorites";
+import Artists from "../artist/pages/Artists";
+import Songs from "../artist/pages/Songs";
+import Categories from "../artist/pages/Categories";
+import Albums from "../artist/pages/Albums";
+import ArtistSettings from "../artist/pages/ArtistSettings";
+import AdminCategoryAlbums from "../artist/pages/CategoryAlbumsAdmin";
 
 export interface RouteConfig {
   path: string;
   label: string;
   icon: React.ElementType | null;
   component?: React.ComponentType<any>;
-  group: "menu" | "library" | "playlist" | "general" | "auth" | "other" | "admin";
+  group: "menu" | "library" | "playlist" | "general" | "auth" | "other" | "artist";
   requiresAuth?: boolean;
   showInSidebar?: boolean;
-  role?: "admin" | "user"; 
+  role?: "admin" | "artist" | "publicer" | "user"; 
   layout?: React.ComponentType<any>; 
 }
 const injectProps = (Component: React.ComponentType<any>, props: any) => {
@@ -238,137 +236,128 @@ export const routeConfig: RouteConfig[] = [
   icon: null,
 },
 
-// Admin routes 
+// Artist routes 
 {
-  path: "/admin",
-  label: "Admin shortcut",
+  path: "/artist",
+  label: "Artist shortcut",
   icon: null,
-  component: () => <Navigate to="/admin/dashboard" replace />,
-  group: "admin",
+  component: () => <Navigate to="/artist/dashboard" replace />,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/login",
-  label: "admin login",
-  icon: null,
-  component: AdminLogin,
-  group: "admin",
-  showInSidebar: false,
-  role: "admin",
-},
-{
-  path: "/admin/dashboard",
+  path: "/artist/dashboard",
   label: "Dashboard",
   icon: null,
   component: Dashboard,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false, 
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/admins",
-  label: "Admins",
+  path: "/artist/admins",
+  label: "Artists",
   icon: null,
-  component: Admins,
-  layout: AdminLayout,
-  group: "admin",
+    component: Artists,
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/users",
+  path: "/artist/users",
   label: "Users",
   icon: null,
   component: Users,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/favorites",
+  path: "/artist/favorites",
   label: "Favorites",
   icon: null,
   component: Favorites,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/artists",
+  path: "/artist/artists",
   label: "Artists",
   icon: null,
   component: Artists,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/songs",
+  path: "/artist/songs",
   label: "Songs",
   icon: null,
   component: Songs,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/categories",
+  path: "/artist/categories",
   label: "Categories",
   icon: null,
   component: Categories,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/CategoryAlbum/:id",
+  path: "/artist/category-album/:id",
   label: "Category Albums",
   icon: null,
   component: AdminCategoryAlbums,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/playlists-report",
+  path: "/artist/playlists-report",
   label: "Playlists Report",
   icon: null,
   component: Albums,
-  layout: AdminLayout,
-  group: "admin",
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 {
-  path: "/admin/settings",
-  label: "Admin Settings",
+  path: "/artist/settings",
+  label: "Artist Settings",
   icon: FaCog,
-  component: AdminSettings,
-  layout: AdminLayout,
-  group: "admin",
+    component: ArtistSettings,
+    layout: ArtistLayout,
+  group: "artist",
   showInSidebar: false,
-  role: "admin",
+  role: "artist",
 },
 
 ]
 
 export const getSidebarLinks = (): RouteConfig[] => {
   return routeConfig.filter(
-    (route) => route.showInSidebar === true && route.group !== "admin"
+    (route) => route.showInSidebar === true && route.group !== "artist"
   );
 };
 
-export const getAdminSidebarLinks = (): RouteConfig[] => {
+export const getArtistSidebarLinks = (): RouteConfig[] => {
   return routeConfig.filter(
-    (route) => route.showInSidebar === true && route.group === "admin"
+    (route) => route.showInSidebar === true && route.group === "artist"
   );
 };
 

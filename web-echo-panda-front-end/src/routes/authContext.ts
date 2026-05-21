@@ -8,12 +8,12 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { app } from "./firebaseConfig";
-import { supabase } from "../backend/supabaseClient";
 import { loginFirebaseUserToBackend } from "./backendAuth";
 
 const db = getFirestore(app);
 
 interface UserData {
+  name?: string;
   username?: string;
   email: string;
   registeredAt?: string;
@@ -78,15 +78,6 @@ export async function SignInWithGoogle(): Promise<UserData> {
       });
     }
 
-    // Store Firebase UID in Supabase
-    const { error } = await supabase
-      .from('users')
-      .upsert({ uid: user.uid }, { onConflict: 'uid' });
-
-    if (error) {
-      console.error("Error storing UID in Supabase:", error);
-    }
-
   } catch (error: any) {
     console.error("Error checking/saving user to Firestore:", error);
     if (error.message.includes("blocked")) {
@@ -103,6 +94,7 @@ export async function SignInWithGoogle(): Promise<UserData> {
   });
 
   const userData: UserData = {
+    name: user.displayName || user.email || "Artist",
     email: user.email || "",
     displayName: user.displayName || "",
     photoURL: user.photoURL || "",
@@ -114,6 +106,10 @@ export async function SignInWithGoogle(): Promise<UserData> {
 
   localStorage.setItem("user", JSON.stringify(userData));
   localStorage.setItem("isAuthenticated", "true");
+  localStorage.setItem("userToken", backendAuth.token);
+  if (["artist", "publicer", "admin"].includes(backendAuth.user.role)) {
+    localStorage.setItem("artistUser", JSON.stringify(userData));
+  }
 
   return userData;
 }
@@ -154,14 +150,6 @@ export async function registerWithEmail(
       authProvider: "email",
     }, { merge: true });
 
-    const { error } = await supabase
-      .from('users')
-      .upsert({ uid: user.uid }, { onConflict: 'uid' });
-
-    if (error) {
-      console.error("Error storing UID in Supabase:", error);
-    }
-
     const backendAuth = await loginFirebaseUserToBackend({
       email: user.email || email,
       name: username || user.displayName || undefined,
@@ -170,6 +158,7 @@ export async function registerWithEmail(
     });
 
     const userData: UserData = {
+      name: username || user.displayName || user.email || "Artist",
       username,
       email: user.email || email,
       displayName: username || user.displayName || "",
@@ -182,6 +171,10 @@ export async function registerWithEmail(
 
     localStorage.setItem("user", JSON.stringify(userData));
     localStorage.setItem("isAuthenticated", "true");
+    localStorage.setItem("userToken", backendAuth.token);
+    if (["artist", "publicer", "admin"].includes(backendAuth.user.role)) {
+      localStorage.setItem("artistUser", JSON.stringify(userData));
+    }
 
     return { success: true, user: userData };
   } catch (error: any) {
@@ -225,14 +218,6 @@ export async function signInWithEmail(email: string, password: string): Promise<
       ...(userDoc.exists() ? {} : { registeredAt: new Date().toISOString(), authProvider: "email" }),
     }, { merge: true });
 
-    const { error } = await supabase
-      .from('users')
-      .upsert({ uid: user.uid }, { onConflict: 'uid' });
-
-    if (error) {
-      console.error("Error storing UID in Supabase:", error);
-    }
-
     const backendAuth = await loginFirebaseUserToBackend({
       email: user.email || email,
       name: user.displayName || undefined,
@@ -241,6 +226,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
     });
 
     const userData: UserData = {
+      name: user.displayName || user.email || "Artist",
       email: user.email || email,
       displayName: user.displayName || "",
       photoURL: user.photoURL || "",
@@ -252,6 +238,10 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
     localStorage.setItem("user", JSON.stringify(userData));
     localStorage.setItem("isAuthenticated", "true");
+    localStorage.setItem("userToken", backendAuth.token);
+    if (["artist", "publicer", "admin"].includes(backendAuth.user.role)) {
+      localStorage.setItem("artistUser", JSON.stringify(userData));
+    }
 
     return { success: true, user: userData };
   } catch (error: any) {
@@ -277,6 +267,8 @@ export async function signInWithEmail(email: string, password: string): Promise<
 export function signOut(): void {
   localStorage.removeItem("isAuthenticated");
   localStorage.removeItem("user");
+  localStorage.removeItem("userToken");
+  localStorage.removeItem("artistUser");
 }
 
 //+++++++++++++++++++++++++++++=++++++++++++++

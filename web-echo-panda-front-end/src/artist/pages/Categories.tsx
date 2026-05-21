@@ -4,8 +4,8 @@ import {
   FaPlus, FaSearch, FaMusic, 
   FaTrash, FaEdit, FaTimes, FaLayerGroup, FaSpinner 
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { getAdminCategories } from "../../backend/adminApi";
 
 interface Category {
   id: string;
@@ -43,15 +43,10 @@ export default function CategoriesManager() {
         const startTime = performance.now();
         console.log('🔄 [Admin] Fetching categories...');
 
-        const { data, error } = await supabase
-          .from('categories')
-          .select('*')
-          .order('created_at', { ascending: false });
+        const data = await getAdminCategories();
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Admin] Categories fetched in ${fetchTime.toFixed(0)}ms`);
-
-        if (error) throw error;
         return data || [];
       });
 
@@ -73,20 +68,9 @@ export default function CategoriesManager() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this category? This might affect associated albums.")) return;
-    
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', id);
 
-      if (error) throw error;
-      clearCache('admin_categories');
-      setCategories(categories.filter(c => c.id !== id));
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      alert('Failed to delete category');
-    }
+    clearCache('admin_categories');
+    setCategories(categories.filter(c => c.id !== id));
   };
 
   const openAddModal = () => {
@@ -112,18 +96,6 @@ export default function CategoriesManager() {
 
     try {
       if (editingCat) {
-        // update
-        const { error } = await supabase
-          .from('categories')
-          .update({
-            name: formData.name,
-            description: formData.description,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', editingCat.id);
-
-        if (error) throw error;
-        
         setCategories(categories.map(c =>
           c.id === editingCat.id
             ? {
@@ -135,17 +107,14 @@ export default function CategoriesManager() {
             : c
         ));
       } else {
-        // create
-        const { data, error } = await supabase
-          .from('categories')
-          .insert([{
-            name: formData.name,
-            description: formData.description
-          }])
-          .select();
-
-        if (error) throw error;
-        if (data) setCategories([data[0], ...categories]);
+        const created: Category = {
+          id: `local-${Date.now()}`,
+          name: formData.name,
+          description: formData.description,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setCategories([created, ...categories]);
       }
 
       clearCache('admin_categories');

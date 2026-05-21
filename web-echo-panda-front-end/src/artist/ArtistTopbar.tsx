@@ -10,7 +10,7 @@ interface AdminTopbarProps {
   onProfileSettingsClick?: () => void;
   onLogout?: () => Promise<void>;
   adminData?: {
-    name: string;
+    name?: string;
     email: string;
     role: string;
     avatar?: string;
@@ -41,25 +41,35 @@ export default function AdminTopbar({
   const [isSearching, setIsSearching] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Load admin data from localStorage or use default
+  // Load artist data from localStorage or use default
   const getAdminFromStorage = () => {
     try {
-      const stored = localStorage.getItem("adminUser");
+      const stored = localStorage.getItem("artistUser");
       if (stored) {
         return JSON.parse(stored);
       }
     } catch (error) {
-      console.error("Failed to load admin data:", error);
+      console.error("Failed to load artist data:", error);
     }
     return {
-      name: "Admin",
-      email: "admin@echopanda.com",
-      role: "Administrator",
+      name: "Artist",
+      email: "artist@echopanda.com",
+      role: "Artist",
       avatar: undefined,
     };
   };
 
-  const admin = adminData || getAdminFromStorage();
+  const storedAdmin = adminData || getAdminFromStorage();
+  const admin = {
+    name:
+      storedAdmin?.name ||
+      storedAdmin?.displayName ||
+      storedAdmin?.email ||
+      "Artist",
+    email: storedAdmin?.email || "artist@echopanda.com",
+    role: storedAdmin?.role || "Artist",
+    avatar: storedAdmin?.avatar,
+  };
 
   // Simulate fetching notifications
   useEffect(() => {
@@ -106,7 +116,7 @@ export default function AdminTopbar({
   const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchQuery.trim()) {
       // Navigate to search results or trigger search
-      navigate(`/admin/search?q=${encodeURIComponent(searchQuery)}`);
+      navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
     }
   };
 
@@ -122,9 +132,9 @@ export default function AdminTopbar({
       } else {
         // Default logout logic
         await auth.signOut();
-        localStorage.removeItem("adminUser");
+        localStorage.removeItem("artistUser");
         localStorage.removeItem("authToken");
-        navigate("/admin/login");
+        navigate("/login");
       }
     } catch (error) {
       console.error("Logout failed:", error);
@@ -143,7 +153,7 @@ export default function AdminTopbar({
     if (onSettingsClick) {
       onSettingsClick();
     } else {
-      navigate("/admin/settings");
+      navigate("/artist/settings");
     }
   };
 
@@ -156,12 +166,13 @@ export default function AdminTopbar({
         console.error("Profile settings action failed:", error);
       }
     } else {
-      navigate("/admin/settings");
+      navigate("/artist/settings");
     }
   };
 
-  const getInitials = (name: string) => {
-    return name
+  const getInitials = (name?: string) => {
+    const safeName = String(name || "Artist").trim();
+    return safeName
       .split(" ")
       .map((n) => n[0])
       .join("")

@@ -23,6 +23,8 @@ class Song extends Model
         'duration',
         'track_number',
         'lyrics',
+        's3_audio_url',
+        's3_lyrics_url',
     ];
 
     /**
@@ -31,5 +33,29 @@ class Song extends Model
     public function album(): BelongsTo
     {
         return $this->belongsTo(Album::class);
+    }
+
+    /**
+     * Get all favorites for this song.
+     */
+    public function favorites()
+    {
+        return $this->morphMany(Favorite::class, 'favoritable');
+    }
+
+    /**
+     * Get listen history for this song.
+     */
+    public function listenHistory()
+    {
+        return $this->hasMany(ListenHistory::class);
+    }
+
+    /**
+     * Get ratings for this song.
+     */
+    public function ratings()
+    {
+        return $this->hasMany(Rating::class);
     }
 }

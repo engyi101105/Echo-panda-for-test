@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { FaMusic, FaMicrophone, FaFire, FaCalendarAlt, FaSpinner } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { getTopFavoritesFallback } from "../../backend/adminApi";
 
 interface Song {
   id: string;
@@ -53,115 +53,10 @@ export default function Favorites({ dateFilter: dateFilterProp, onFilterChange }
 
       const data = await getCachedData(`admin_favorites_${dateFilter}`, async () => {
         console.log('🔄 [Admin Favorites] Fetching data...');
-        const dateThreshold = getDateFilter();
+        const top = await getTopFavoritesFallback(10);
 
-        // Fetch top favorited songs
-        let songsQuery = supabase
-          .from('user_favorite_songs')
-          .select(`
-            song_id,
-            songs (
-              id,
-              title,
-              songCover_url,
-              song_artist (
-                artists (id, name, image_url)
-              )
-            )
-          `);
-
-        if (dateThreshold) {
-          songsQuery = songsQuery.gte('created_at', dateThreshold);
-        }
-
-        const { data: favoritesData, error: favError } = await songsQuery;
-
-        if (favError) throw favError;
-
-        // Count favorites per song and get plays
-        const songCounts = new Map<string, { song: any; count: number }>();
-        (favoritesData || []).forEach((fav: any) => {
-          if (fav.songs) {
-            const existing = songCounts.get(fav.song_id) || { song: fav.songs, count: 0 };
-            songCounts.set(fav.song_id, { ...existing, count: existing.count + 1 });
-          }
-        });
-
-        // Get play counts for these songs
-        const songIds = Array.from(songCounts.keys());
-        let playCounts = new Map<string, number>();
-        
-        if (songIds.length > 0) {
-          let playsQuery = supabase
-            .from('user_listens')
-            .select('song_id');
-          
-          if (dateThreshold) {
-            playsQuery = playsQuery.gte('listened_at', dateThreshold);
-          }
-          
-          const { data: playsData } = await playsQuery.in('song_id', songIds);
-          
-          (playsData || []).forEach((play: any) => {
-            playCounts.set(play.song_id, (playCounts.get(play.song_id) || 0) + 1);
-          });
-        }
-
-        const topSongs: Song[] = Array.from(songCounts.entries())
-          .sort((a, b) => b[1].count - a[1].count)
-          .slice(0, 10)
-          .map(([songId, { song, count }], index) => ({
-            id: songId,
-            rank: index + 1,
-            title: song.title,
-            artist: song.song_artist?.map((sa: any) => sa.artists.name).join(', ') || 'Unknown',
-            favorites: count,
-            plays: playCounts.get(songId) || 0,
-            cover_url: song.songCover_url
-          }));
-
-        // Calculate artist favorites from song favorites
-        // Get all artists from favorited songs
-        const artistCounts = new Map<string, { artist: { id: string; name: string; image_url?: string }; count: number }>();
-        
-        (favoritesData || []).forEach((fav: any) => {
-          if (fav.songs?.song_artist) {
-            fav.songs.song_artist.forEach((sa: any) => {
-              if (sa.artists) {
-                const artistId = sa.artists.id || sa.artists.name; // Use ID or name as fallback
-                const existing = artistCounts.get(artistId);
-                
-                if (existing) {
-                  artistCounts.set(artistId, { ...existing, count: existing.count + 1 });
-                } else {
-                  artistCounts.set(artistId, { 
-                    artist: {
-                      id: artistId,
-                      name: sa.artists.name,
-                      image_url: sa.artists.image_url
-                    }, 
-                    count: 1 
-                  });
-                }
-              }
-            });
-          }
-        });
-
-        const topArtists: Artist[] = Array.from(artistCounts.entries())
-          .sort((a, b) => b[1].count - a[1].count)
-          .slice(0, 10)
-          .map(([artistId, { artist, count }], index) => ({
-            id: artistId,
-            rank: index + 1,
-            name: artist.name,
-            favorites: count,
-            followers: count, // Use favorite count as followers for now
-            image_url: artist.image_url
-          }));
-
-        console.log(`📊 [Admin Favorites] Retrieved ${topSongs.length} songs, ${topArtists.length} artists`);
-        return { songs: topSongs, artists: topArtists };
+        console.log(`📊 [Admin Favorites] Retrieved ${top.songs.length} songs, ${top.artists.length} artists`);
+        return { songs: top.songs, artists: top.artists };
       });
 
       setSongs(data.songs);

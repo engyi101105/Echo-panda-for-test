@@ -8,9 +8,9 @@ import {
   FaChartLine,
   FaSpinner,
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { getFirestore, collection, getDocs } from "firebase/firestore";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { getDashboardCounts, getAdminSongs } from "../../backend/adminApi";
 
 
 interface StatCard {
@@ -47,12 +47,7 @@ export default function Dashboard() {
         const data = await getCachedData('admin_dashboard', async () => {
           console.log('🔄 [Admin Dashboard] Fetching statistics...');
 
-          // Fetch counts from Supabase
-          const [songsResult, artistsResult, playlistsResult] = await Promise.all([
-            supabase.from('songs').select('id', { count: 'exact', head: true }),
-            supabase.from('artists').select('id', { count: 'exact', head: true }),
-            supabase.from('playlists').select('id', { count: 'exact', head: true }),
-          ]);
+          const counts = await getDashboardCounts();
 
           // Fetch users from Firebase Firestore and group by creation month
           let usersCount = 0;
@@ -87,16 +82,13 @@ export default function Dashboard() {
 
           const stats: StatCard[] = [
             { title: "Total Users", value: usersCount, icon: <FaUsers />, color: "from-blue-500 to-cyan-500" },
-            { title: "Total Songs", value: songsResult.count || 0, icon: <FaCompactDisc />, color: "from-purple-500 to-pink-500" },
-            { title: "Total Artists", value: artistsResult.count || 0, icon: <FaMusic />, color: "from-green-500 to-emerald-500" },
-            { title: "Total Playlists", value: playlistsResult.count || 0, icon: <FaListUl />, color: "from-orange-500 to-red-500" },
+            { title: "Total Songs", value: counts.songs || 0, icon: <FaCompactDisc />, color: "from-purple-500 to-pink-500" },
+            { title: "Total Artists", value: counts.artists || 0, icon: <FaMusic />, color: "from-green-500 to-emerald-500" },
+            { title: "Total Playlists", value: counts.playlists || 0, icon: <FaListUl />, color: "from-orange-500 to-red-500" },
           ];
 
           // Fetch monthly song creation data for chart
-          const { data: songsByMonth } = await supabase
-            .from('songs')
-            .select('created_at')
-            .order('created_at', { ascending: true });
+          const songsByMonth = await getAdminSongs(500);
 
           // Group songs by month
           const songMonthCounts = new Map<string, number>();

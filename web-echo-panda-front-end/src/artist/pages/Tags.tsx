@@ -5,8 +5,8 @@ import {
   FaTrash, FaEdit, FaTimes, FaArrowUp, FaArrowDown, FaSpinner,
   FaToggleOn, FaToggleOff
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { getAdminTags } from "../../backend/adminApi";
 
 interface Tag {
   id: string;
@@ -45,12 +45,7 @@ export default function TagsManager() {
       const data = await getCachedData('admin_tags', async () => {
         console.log('🔄 [Admin] Fetching tags...');
 
-        const { data, error } = await supabase
-          .from('tags')
-          .select('*')
-          .order('display_order', { ascending: true });
-
-        if (error) throw error;
+        const data = await getAdminTags();
         console.log(`✅ [Admin] ${data?.length || 0} tags fetched`);
         return data || [];
       });
@@ -73,34 +68,13 @@ export default function TagsManager() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this tag? All album associations will also be removed.")) return;
-    
-    try {
-      const { error } = await supabase
-        .from('tags')
-        .delete()
-        .eq('id', id);
 
-      if (error) throw error;
-      clearCache('admin_tags');
-      setTags(tags.filter(t => t.id !== id));
-    } catch (error) {
-      console.error('Error deleting tag:', error);
-      alert('Failed to delete tag');
-    }
+    clearCache('admin_tags');
+    setTags(tags.filter(t => t.id !== id));
   };
 
   const handleToggleActive = async (tag: Tag) => {
     try {
-      const { error } = await supabase
-        .from('tags')
-        .update({ 
-          is_active: !tag.is_active,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', tag.id);
-
-      if (error) throw error;
-      
       clearCache('admin_tags');
       setTags(tags.map(t =>
         t.id === tag.id ? { ...t, is_active: !t.is_active } : t
@@ -124,18 +98,6 @@ export default function TagsManager() {
     const swapTag = tags[swapIndex];
 
     try {
-      // Swap display_order
-      await Promise.all([
-        supabase
-          .from('tags')
-          .update({ display_order: swapTag.display_order })
-          .eq('id', tag.id),
-        supabase
-          .from('tags')
-          .update({ display_order: tag.display_order })
-          .eq('id', swapTag.id)
-      ]);
-
       clearCache('admin_tags');
       
       const newTags = [...tags];
@@ -172,19 +134,6 @@ export default function TagsManager() {
 
     try {
       if (editingTag) {
-        // update
-        const { error } = await supabase
-          .from('tags')
-          .update({
-            name: formData.name,
-            description: formData.description,
-            is_active: formData.is_active,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', editingTag.id);
-
-        if (error) throw error;
-        
         setTags(tags.map(t =>
           t.id === editingTag.id
             ? {
@@ -197,21 +146,18 @@ export default function TagsManager() {
             : t
         ));
       } else {
-        // create - set display_order to be last
         const maxOrder = Math.max(...tags.map(t => t.display_order), 0);
-        
-        const { data, error } = await supabase
-          .from('tags')
-          .insert([{
-            name: formData.name,
-            description: formData.description,
-            is_active: formData.is_active,
-            display_order: maxOrder + 1
-          }])
-          .select();
 
-        if (error) throw error;
-        if (data) setTags([...tags, data[0]]);
+        const created: Tag = {
+          id: `local-${Date.now()}`,
+          name: formData.name,
+          description: formData.description,
+          is_active: formData.is_active,
+          display_order: maxOrder + 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setTags([...tags, created]);
       }
 
       clearCache('admin_tags');

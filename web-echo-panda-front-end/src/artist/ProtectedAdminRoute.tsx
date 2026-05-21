@@ -23,32 +23,32 @@ export default function ProtectedAdminRoute({ children }: ProtectedAdminRoutePro
       try {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
           if (!user) {
-            navigate("/admin/login", { replace: true });
+            navigate("/login", { replace: true });
             setIsChecking(false);
             return;
           }
 
-          // Optional admin metadata from Firestore (may not exist for artists)
-          const adminDocRef = doc(db, "admins", user.uid);
-          const adminDoc = await getDoc(adminDocRef);
-          const adminData = adminDoc.exists() ? adminDoc.data() : null;
+          // Optional artist metadata from Firestore (may not exist for all users)
+          const artistDocRef = doc(db, "admins", user.uid);
+          const artistDoc = await getDoc(artistDocRef);
+          const artistData = artistDoc.exists() ? artistDoc.data() : null;
 
           // Synchronize with backend to get the authoritative role
           const backendAuth = await loginFirebaseUserToBackend({
             email: user.email || "",
-            name: adminData?.name || user.displayName || undefined,
+            name: artistData?.name || user.displayName || undefined,
             firebase_uid: user.uid,
             provider: "email",
           });
 
           const role = backendAuth.user.role;
 
-          // If Firestore admin doc exists, enforce its status
-          if (adminData && adminData.status !== "active") {
-            console.error("Account inactive per Firestore admins doc");
+          // If Firestore artist doc exists, enforce its status
+          if (artistData && artistData.status !== "active") {
+            console.error("Account inactive per Firestore artist doc");
             await auth.signOut();
-            localStorage.removeItem("adminUser");
-            navigate("/admin/login", { replace: true });
+            localStorage.removeItem("artistUser");
+            navigate("/login", { replace: true });
             setIsChecking(false);
             return;
           }
@@ -63,8 +63,8 @@ export default function ProtectedAdminRoute({ children }: ProtectedAdminRoutePro
           if (!["artist", "publicer"].includes(role)) {
             console.error("Only artist/publicer can access frontend dashboard");
             await auth.signOut();
-            localStorage.removeItem("adminUser");
-            navigate("/admin/login", { replace: true });
+            localStorage.removeItem("artistUser");
+            navigate("/login", { replace: true });
             setIsChecking(false);
             return;
           }
@@ -77,7 +77,7 @@ export default function ProtectedAdminRoute({ children }: ProtectedAdminRoutePro
         return () => unsubscribe();
       } catch (error) {
         console.error("Auth check error:", error);
-        navigate("/admin/login", { replace: true });
+        navigate("/login", { replace: true });
         setIsChecking(false);
       }
     };

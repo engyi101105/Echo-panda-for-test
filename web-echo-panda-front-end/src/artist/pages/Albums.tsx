@@ -3,8 +3,8 @@ import {
   FaSearch, FaTimes, FaPlus, FaCamera, FaCalendarAlt, 
   FaEye, FaEdit, FaTrash, FaCompactDisc, FaMusic, FaRecordVinyl, FaMicrophone, FaTag 
 } from "react-icons/fa";
-import { supabase } from "../../backend/supabaseClient";
 import { useDataCache } from "../../contexts/DataCacheContext";
+import { createAlbum, deleteAlbum, getAdminAlbums, getAdminArtists, getAdminCategories, updateAlbum } from "../../backend/adminApi";
 
 type AlbumType = "album" | "single" | "ep";
 
@@ -72,33 +72,10 @@ export default function Albums() {
         const startTime = performance.now();
         console.log('🔄 [Admin] Fetching albums...');
 
-        const { data: albumsData, error } = await supabase
-          .from('albums')
-          .select(`
-            id,
-            title,
-            cover_url,
-            type,
-            release_date,
-            created_at,
-            updated_at,
-            album_artist(
-              artists(id, name, image_url)
-            ),
-            album_category(
-              categories(id, name)
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(50);
+        const albumsData = await getAdminAlbums(200);
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Admin] Albums fetched in ${fetchTime.toFixed(0)}ms`);
-
-        if (error) {
-          console.error('❌ Fetch error:', error);
-          throw error;
-        }
 
         const transformedAlbums = (albumsData || []).map(album => ({
           id: album.id,
@@ -108,8 +85,8 @@ export default function Albums() {
           release_date: album.release_date,
           created_at: album.created_at,
           updated_at: album.updated_at,
-          artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || [],
-          categories: album.album_category?.map((ac: any) => ac.categories).filter(Boolean) || []
+          artists: album.artists || [],
+          categories: album.categories || []
         }));
 
         console.log(`📊 Transformed ${transformedAlbums.length} albums`);
@@ -128,14 +105,7 @@ export default function Albums() {
   const fetchArtists = async () => {
     try {
       const data = await getCachedData('admin_album_artists', async () => {
-        const { data, error } = await supabase
-          .from('artists')
-          .select('id, name, image_url')
-          .eq('status', true)
-          .order('name');
-
-        if (error) throw error;
-        return data || [];
+        return (await getAdminArtists()) || [];
       });
 
       setAllArtists(data);
@@ -147,13 +117,7 @@ export default function Albums() {
   const fetchCategories = async () => {
     try {
       const data = await getCachedData('admin_album_categories', async () => {
-        const { data, error } = await supabase
-          .from('categories')
-          .select('id, name')
-          .order('name');
-
-        if (error) throw error;
-        return data || [];
+        return (await getAdminCategories()) || [];
       });
 
       setAllCategories(data);
@@ -199,106 +163,28 @@ export default function Albums() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const primaryArtistName = allArtists.find((a) => a.id === selectedArtistIds[0])?.name || 'Unknown Artist';
+
       if (modalMode === "add") {
-        // Insert album
-        const { data: newAlbum, error: albumError } = await supabase
-          .from('albums')
-          .insert([{
-            title: formData.title,
-            type: formData.type,
-            cover_url: formData.cover_url || `https://ui-avatars.com/api/?name=${formData.title}&background=random&size=400`,
-            release_date: formData.release_date
-          }])
-          .select()
-          .single();
+        await createAlbum({
+          title: formData.title || '',
+          artist: primaryArtistName,
+          release_date: formData.release_date,
+          s3_cover_image_url: formData.cover_url || `https://ui-avatars.com/api/?name=${formData.title}&background=random&size=400`,
+          description: formData.type || 'album',
+        });
 
-        if (albumError) throw albumError;
-
-        // Insert artist relationships
-        if (selectedArtistIds.length > 0) {
-          const artistRelations = selectedArtistIds.map(artistId => ({
-            album_id: newAlbum.id,
-            artist_id: artistId,
-            primary_artist: true
-          }));
-
-          const { error: artistError } = await supabase
-            .from('album_artist')
-            .insert(artistRelations);
-
-          if (artistError) throw artistError;
-        }
-
-        // Insert category relationships
-        if (selectedCategoryIds.length > 0) {
-          const categoryRelations = selectedCategoryIds.map(categoryId => ({
-            album_id: newAlbum.id,
-            category_id: categoryId
-          }));
-
-          const { error: categoryError } = await supabase
-            .from('album_category')
-            .insert(categoryRelations);
-
-          if (categoryError) throw categoryError;
-        }
-
-        // Refresh albums
         await fetchAlbums();
         
       } else if (modalMode === "edit" && selectedAlbum) {
-        // Update album
-        const { error: updateError } = await supabase
-          .from('albums')
-          .update({
-            title: formData.title,
-            type: formData.type,
-            cover_url: formData.cover_url,
-            release_date: formData.release_date,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', selectedAlbum.id);
+        await updateAlbum(selectedAlbum.id, {
+          title: formData.title || '',
+          artist: primaryArtistName,
+          release_date: formData.release_date,
+          s3_cover_image_url: formData.cover_url || '',
+          description: formData.type || 'album',
+        });
 
-        if (updateError) throw updateError;
-
-        // Delete existing artist relationships
-        await supabase
-          .from('album_artist')
-          .delete()
-          .eq('album_id', selectedAlbum.id);
-
-        // Insert new artist relationships
-        if (selectedArtistIds.length > 0) {
-          const artistRelations = selectedArtistIds.map(artistId => ({
-            album_id: selectedAlbum.id,
-            artist_id: artistId,
-            primary_artist: true
-          }));
-
-          await supabase
-            .from('album_artist')
-            .insert(artistRelations);
-        }
-
-        // Delete existing category relationships
-        await supabase
-          .from('album_category')
-          .delete()
-          .eq('album_id', selectedAlbum.id);
-
-        // Insert new category relationships
-        if (selectedCategoryIds.length > 0) {
-          const categoryRelations = selectedCategoryIds.map(categoryId => ({
-            album_id: selectedAlbum.id,
-            category_id: categoryId
-          }));
-
-          await supabase
-            .from('album_category')
-            .insert(categoryRelations);
-        }
-
-        // Refresh albums
         await fetchAlbums();
       }
       
@@ -313,12 +199,7 @@ export default function Albums() {
     if (!confirm('Are you sure you want to delete this album?')) return;
     
     try {
-      const { error } = await supabase
-        .from('albums')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      await deleteAlbum(id);
       setAlbums(albums.filter(a => a.id !== id));
     } catch (error) {
       console.error('Error deleting album:', error);

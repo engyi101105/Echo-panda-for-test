@@ -1,7 +1,25 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BgImage from "../assets/loginBG.jpg";
+import { getAdminBackendUrl } from "../routes/backendAuth";
 import { SignInWithGoogle, signInWithEmail } from "../routes/authContext";
+
+const redirectAfterLogin = (
+  navigate: ReturnType<typeof useNavigate>,
+  role?: string
+): void => {
+  if (role === "artist" || role === "publicer") {
+    void navigate("/artist/dashboard", { replace: true });
+    return;
+  }
+
+  if (role === "admin") {
+    window.location.href = getAdminBackendUrl();
+    return;
+  }
+
+  void navigate("/", { replace: true });
+};
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -32,7 +50,7 @@ const Login: React.FC = () => {
       }
 
       console.log("Login success", result.user);
-      void navigate("/");
+      redirectAfterLogin(navigate, result.user?.backendRole);
     } catch (err: unknown) {
       if (err instanceof Error) console.error("Login error", err);
       setError("Failed to log in. Please try again.");
@@ -48,7 +66,7 @@ const Login: React.FC = () => {
     try {
       const user = await SignInWithGoogle();
       console.log("Google login success:", user);
-      void navigate("/");
+      redirectAfterLogin(navigate, user.backendRole);
     } catch (err: any) {
       console.error("Failed to login with Google", err);
 

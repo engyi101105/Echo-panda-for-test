@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaSpinner, FaMusic, FaTrash } from "react-icons/fa";
-import { supabase } from "../backend/supabaseClient";
-import { useDataCache } from "../contexts/DataCacheContext";
 import Song from "../components/Song";
-import { getUserFavorites, removeFromFavorites } from "../backend/favoritesService";
+import { removeFromFavorites } from "../backend/favoritesService";
 import { trackSongPlay } from "../backend/playTrackingService";
 
 interface Artist {
@@ -32,13 +30,21 @@ interface SongData {
   added_at?: string;
 }
 
+const viteEnv = (import.meta as any).env || {};
+const BACKEND_API_BASE_URL =
+  viteEnv.VITE_BACKEND_API_URL || "http://localhost:8082/api";
+
+const getBackendToken = (): string | null => {
+  return localStorage.getItem("userToken") || localStorage.getItem("authToken");
+};
+
 
 
 const Favorites: React.FC = () => {
   const navigate = useNavigate();
-  const { getCachedData } = useDataCache();
-  const [songs, setSongs] = useState<SongData[]>([]);
+  const [songs, setSongs] = useState<any>([]);
   const [loading, setLoading] = useState(true);
+  const [rawResponse, setRawResponse] = useState<any>(null);
 
   useEffect(() => {
     fetchFavoriteSongs();
@@ -50,54 +56,64 @@ const Favorites: React.FC = () => {
       const startTime = performance.now();
       console.log('🔄 [Favorites] Fetching favorite songs...');
 
-      const data = await getCachedData('favorite_songs', async () => {
-        // Get user's favorite song IDs
-        const favoriteSongIds = await getUserFavorites();
-
-        if (favoriteSongIds.length === 0) {
+      const data = await (async () => {
+        const token = getBackendToken();
+        if (!token) {
           return [];
         }
 
-        // Fetch full song details
-        const { data: songsData, error } = await supabase
-          .from('songs')
-          .select(`
-            id,
-            title,
-            duration,
-            album_id,
-            audio_url,
-            songCover_url,
-            created_at,
-            song_artist(
-              artists(id, name, image_url)
-            ),
-            albums(id, title, cover_url)
-          `)
-          .in('id', favoriteSongIds);
+        const response = await fetch(`${BACKEND_API_BASE_URL}/profile/favorite-songs`, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch favorite songs");
+        }
+
+        const json = await response.json();
+        console.debug('[Favorites] raw response', json);
+        setRawResponse(json);
+        const favorites = json?.data || json?.favorites || json?.songs || [];
+        console.debug('[Favorites] extracted favorites length', Array.isArray(favorites) ? favorites.length : typeof favorites, favorites);
 
         const fetchTime = performance.now() - startTime;
         console.log(`✅ [Favorites] Songs fetched in ${fetchTime.toFixed(0)}ms`);
-        console.log(`📊 [Favorites] Retrieved ${songsData?.length || 0} songs`);
+        console.log(`📊 [Favorites] Retrieved ${favorites.length || 0} songs`);
 
-        if (error) throw error;
+        const transformedSongs: SongData[] = favorites
+          .map((favorite: any) => {
+            const song = favorite?.favoritable;
+            if (!song) return null;
 
-        const transformedSongs: SongData[] = (songsData || []).map((song: any) => ({
-          id: song.id,
-          title: song.title,
-          duration: song.duration,
-          album_id: song.album_id,
-          audio_url: song.audio_url,
-          songCover_url: song.songCover_url,
-          created_at: song.created_at,
-          artists: song.song_artist?.map((sa: any) => sa.artists).filter(Boolean) || [],
-          album: song.albums || null
-        }));
+            return {
+              id: String(song.id),
+              title: song.title,
+              duration: song.duration,
+              album_id: song.album_id ? String(song.album_id) : null,
+              audio_url: song.s3_audio_url || null,
+              songCover_url: song.songCover_url || song.album?.s3_cover_image_url || null,
+              created_at: favorite.created_at || song.created_at,
+              artists: song.artist ? [{ id: String(song.id), name: song.artist }] : [],
+              album: song.album
+                ? {
+                    id: String(song.album.id),
+                    title: song.album.title,
+                    cover_url: song.album.s3_cover_image_url || song.album.cover_image || undefined,
+                  }
+                : null,
+            };
+          })
+          .filter(Boolean) as SongData[];
 
         return transformedSongs;
       });
 
       setSongs(data);
+      console.debug('[Favorites] setSongs called with', Array.isArray(data) ? data.length : typeof data, data);
     } catch (error) {
       console.error('Error fetching favorite songs:', error);
     } finally {
@@ -127,7 +143,7 @@ const Favorites: React.FC = () => {
 
   const handleClearAll = async () => {
     if (window.confirm('Are you sure you want to remove all favorites?')) {
-      for (const song of songs) {
+      for (const song of songsList) {
         await removeFromFavorites(song.id);
       }
       setSongs([]);
@@ -147,6 +163,40 @@ const Favorites: React.FC = () => {
     if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
     return `${Math.floor(diffDays / 365)} years ago`;
   };
+  const toSongData = (favorite: any): SongData | null => {
+    const song = favorite?.favoritable || (favorite?.song ?? null) || null;
+    if (!song) return null;
+
+    return {
+      id: String(song.id),
+      title: song.title,
+      duration: song.duration,
+      album_id: song.album_id ? String(song.album_id) : null,
+      audio_url: song.s3_audio_url || null,
+      songCover_url: song.songCover_url || song.album?.s3_cover_image_url || null,
+      created_at: favorite.created_at || song.created_at || new Date().toISOString(),
+      artists: song.artist ? [{ id: String(song.id), name: song.artist }] : [],
+      album: song.album
+        ? {
+            id: String(song.album.id),
+            title: song.album.title,
+            cover_url: song.album.s3_cover_image_url || song.album.cover_image || undefined,
+          }
+        : null,
+    };
+  };
+
+  // Derive a single songsList used for counts and rendering. Prefer `songs` state when it's an array,
+  // otherwise fall back to the raw API `rawResponse.data` transformed into SongData.
+  const songsList: SongData[] = Array.isArray(songs)
+    ? songs
+    : Array.isArray(songs?.data)
+    ? songs.data
+    : Array.isArray(rawResponse?.data)
+    ? rawResponse.data.map(toSongData).filter(Boolean) as SongData[]
+    : Array.isArray(rawResponse?.favorites)
+    ? rawResponse.favorites.map(toSongData).filter(Boolean) as SongData[]
+    : [];
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white py-8">
@@ -158,9 +208,9 @@ const Favorites: React.FC = () => {
             </h1>
           </div>
           <p className="text-slate-400 text-lg">
-            {songs.length} {songs.length === 1 ? 'song' : 'songs'}
+            {songsList.length} {songsList.length === 1 ? 'song' : 'songs'}
           </p>
-          {songs.length > 0 && (
+          {songsList.length > 0 && (
             <button
               onClick={handleClearAll}
               className="flex items-center gap-2 px-6 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors border border-red-500/30"
@@ -175,7 +225,7 @@ const Favorites: React.FC = () => {
           <div className="flex items-center justify-center py-32">
             <FaSpinner className="text-purple-400 text-5xl animate-spin" />
           </div>
-        ) : songs.length === 0 ? (
+        ) : songsList.length === 0 ? (
           <div className="text-center py-32">
             <FaMusic className="text-slate-700 text-6xl mx-auto mb-4" />
             <p className="text-slate-400 text-xl mb-2">No liked songs yet</p>
@@ -194,26 +244,28 @@ const Favorites: React.FC = () => {
 
             {/* Song List */}
             <div className="space-y-2 mt-3">
-              {songs.map((song, index) => (
-                <Song
-                  key={song.id}
-                  id={song.id}
-                  index={index + 1}
-                  title={song.title}
-                  artists={song.artists}
-                  album={song.album}
-                  duration={song.duration}
-                  coverUrl={song.songCover_url}
-                  metadata={formatDate(song.created_at)}
-                  onPlay={handlePlay}
-                  onAddToPlaylist={handleAddToPlaylist}
-                  onAddToFavorite={handleRemoveFavorite}
-                />
+              {songsList.map((song, index) => (
+                  <Song
+                    key={song.id}
+                    id={song.id}
+                    index={index + 1}
+                    title={song.title}
+                    artists={song.artists}
+                    album={song.album}
+                    duration={song.duration}
+                    coverUrl={song.songCover_url}
+                    metadata={formatDate(song.created_at)}
+                    onPlay={handlePlay}
+                    onAddToPlaylist={handleAddToPlaylist}
+                    onAddToFavorite={handleRemoveFavorite}
+                  />
               ))}
             </div>
           </div>
         )}
       </div>
+
+      
     </div>
   );
 };

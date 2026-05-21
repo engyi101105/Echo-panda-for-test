@@ -27,6 +27,7 @@ class StoreAlbumRequest extends FormRequest
             'release_date' => ['nullable', 'date'],
             'description' => ['nullable', 'string'],
             'cover_image' => ['nullable', 'string', 'max:255'],
+            's3_cover_image_url' => ['nullable', 'string', 'max:2048'],
         ];
     }
 }

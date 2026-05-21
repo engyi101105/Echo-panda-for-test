@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../backend/supabaseClient";
+import { getDerivedArtists } from "../../backend/catalogService";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import { FaSpinner } from "react-icons/fa";
 
@@ -41,16 +41,7 @@ const ArtistSection: React.FC<Props> = ({ title = "Artists", isLightMode = true,
       setLoading(true);
 
       const data = await getCachedData(`artists_limit${limit}`, async () => {
-        // Fetch from Supabase if not cached
-        const { data: artistsData, error } = await supabase
-          .from('artists')
-          .select('id, name, image_url')
-          .eq('status', true)
-          .order('created_at', { ascending: false })
-          .limit(Math.max(1, limit));
-
-        if (error) throw error;
-
+        const artistsData = await getDerivedArtists(Math.max(1, limit));
         return artistsData || [];
       });
 

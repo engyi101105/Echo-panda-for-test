@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../backend/supabaseClient";
+import { getAlbums } from "../../backend/catalogService";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import AlbumCard from "../../components/AlbumCard";
 import { FaSpinner } from "react-icons/fa";
@@ -59,23 +59,7 @@ const SongSection: React.FC<Props> = ({
       setLoading(true);
 
       const data = await getCachedData(`albums_${limit}_${offset}`, async () => {
-        // Fetch from Supabase if not cached
-        const { data: albumsData, error } = await supabase
-        .from('albums')
-        .select(`
-          id,
-          title,
-          cover_url,
-          type,
-          release_date,
-          album_artist(
-            artists(id, name, image_url)
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .range(Math.max(0, offset), Math.max(0, offset) + Math.max(1, limit) - 1);
-
-        if (error) throw error;
+        const albumsData = await getAlbums(Math.max(1, limit), Math.max(0, offset));
 
         const transformedAlbums: Album[] = (albumsData || []).map((album: any) => ({
           id: album.id,
@@ -83,7 +67,7 @@ const SongSection: React.FC<Props> = ({
           cover_url: album.cover_url,
           type: album.type,
           release_date: album.release_date,
-          artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+          artists: album.artists || []
         }));
 
         return transformedAlbums;

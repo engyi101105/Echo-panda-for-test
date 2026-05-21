@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../backend/supabaseClient";
+import { getAlbums } from "../../backend/catalogService";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import AlbumCard from "../../components/AlbumCard";
 import { FaSpinner } from "react-icons/fa";
@@ -31,37 +31,19 @@ export default function SingleSongs({ artistId }: Props) {
     try {
       const data = await getCachedData(`artist_singles_${artistId}`, async () => {
         console.log(`🔄 [Artist Singles] Fetching singles (type='single') for artist ${artistId}...`);
-
-        // Fetch albums with type='single' by this artist
-        const { data: albumData, error } = await supabase
-          .from('album_artist')
-          .select(`
-            albums (
-              id,
-              title,
-              cover_url,
-              type,
-              release_date,
-              album_artist (
-                artists (id, name)
-              )
-            )
-          `)
-          .eq('artist_id', artistId);
-
-        if (error) throw error;
+        const albums = await getAlbums(200, 0);
 
         // Filter for type='single' and transform
-        const transformedSingles = (albumData || [])
-          .map((item: any) => item.albums)
+        const transformedSingles = (albums || [])
           .filter((album: any) => album && album.type === 'single')
+          .filter((album: any) => (album.artists || []).some((artist: any) => artist.id === artistId || encodeURIComponent(artist.name) === artistId))
           .map((album: any) => ({
             id: album.id,
             title: album.title,
             cover_url: album.cover_url,
             type: album.type,
             release_date: album.release_date,
-            artists: album.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
+            artists: album.artists || []
           }));
 
         console.log(`✅ [Artist Singles] ${transformedSingles.length} singles found`);

@@ -7,7 +7,7 @@ import ContactUs from "./ContactUs";
 
 import InterestOnboardingModal from "../components/InterestOnboardingModal";
 import { getRecommendationsForInterests, type AlbumRef } from "../backend/recommendationService";
-import { supabase } from "../backend/supabaseClient";
+import { getDerivedCategories, getHomeTags } from "../backend/catalogService";
 import { useDataCache } from "../contexts/DataCacheContext";
 
 interface Tag {
@@ -47,12 +47,7 @@ const Home: React.FC = () => {
 
   const fetchGenres = async () => {
     try {
-      const { data: categoryData, error } = await supabase
-        .from('categories')
-        .select('id, name');
-
-      if (error) throw error;
-
+      const categoryData = await getDerivedCategories();
       const genreNames = (categoryData || []).map((cat: any) => cat.name);
       setGenreOptions(genreNames);
       console.log('✅ [Home] Genres loaded:', genreNames);
@@ -66,46 +61,7 @@ const Home: React.FC = () => {
       const data = await getCachedData('home_tags', async () => {
         console.log('🔄 [Home] Fetching active tags...');
 
-        // Fetch active tags with their albums
-        const { data: tagsData, error } = await supabase
-          .from('tags')
-          .select(`
-            id,
-            name,
-            description,
-            display_order,
-            album_tag (
-              albums (
-                id,
-                title,
-                cover_url,
-                type,
-                release_date,
-                album_artist (
-                  artists (id, name, image_url)
-                )
-              )
-            )
-          `)
-          .eq('is_active', true)
-          .order('display_order', { ascending: true });
-
-        if (error) throw error;
-
-        const transformedTags = (tagsData || []).map((tag: any) => ({
-          id: tag.id,
-          name: tag.name,
-          description: tag.description,
-          display_order: tag.display_order,
-          albums: tag.album_tag?.map((at: any) => ({
-            id: at.albums.id,
-            title: at.albums.title,
-            cover_url: at.albums.cover_url,
-            type: at.albums.type,
-            release_date: at.albums.release_date,
-            artists: at.albums.album_artist?.map((aa: any) => aa.artists).filter(Boolean) || []
-          })) || []
-        }));
+        const transformedTags = await getHomeTags();
 
         console.log(`✅ [Home] ${transformedTags.length} active tags loaded`);
         return transformedTags;
