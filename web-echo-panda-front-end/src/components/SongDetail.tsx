@@ -269,13 +269,13 @@ const SongDetails: React.FC = () => {
         title: songData.title,
         duration: songData.duration,
         album_id: songData.album_id,
-        audio_url: songData.s3_audio_url || null,
-        songCover_url: songData.album?.s3_cover_image_url || songData.album?.cover_image || null,
+        audio_url: songData.audio_url || null,
+        songCover_url: songData.album?.cover_url || songData.album?.cover_image || null,
         created_at: songData.created_at,
-        album: album ? {
+          album: album ? {
           id: album.id,
           title: album.title,
-          cover_url: album.s3_cover_image_url || album.cover_image,
+          cover_url: album.cover_url || album.cover_image,
           release_date: album.release_date
         } : undefined,
         artists: songData.artist ? [{ id: String(songData.id), name: songData.artist, image_url: '' }] : []
@@ -299,7 +299,7 @@ const SongDetails: React.FC = () => {
           title: song.title,
           duration: song.duration,
           album_id: song.album_id,
-          audio_url: song.s3_audio_url || null,
+          audio_url: song.audio_url || null,
           songCover_url: transformedSong.album?.cover_url || null,
           created_at: song.created_at,
           artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: '' }] : []
@@ -339,7 +339,7 @@ const SongDetails: React.FC = () => {
         title: songToPlay.title,
         artist: songToPlay.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
         coverUrl: songToPlay.songCover_url || currentSong?.album?.cover_url || '',
-        audioUrl: songToPlay.audio_url,
+        audioUrl: songToPlay.original_key || songToPlay.audio_url,
         duration: songToPlay.duration
       };
       console.log('🎵 Calling playSong with:', songData);
@@ -403,7 +403,7 @@ const SongDetails: React.FC = () => {
     );
   }
 
-  const albumCover = currentSong.album?.cover_url || currentSong.songCover_url || '';
+  const albumCover = currentSong.songCover_url || '';
   const albumTitle = currentSong.album?.title || 'Unknown Album';
   const artistNames = currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist';
 

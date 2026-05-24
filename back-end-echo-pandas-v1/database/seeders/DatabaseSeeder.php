@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         // Create admin user
         $this->call([
             AdminUserSeeder::class,
+            EchoPandaStreamingSeeder::class,
         ]);
 
         // Optionally create test user

@@ -1,4 +1,5 @@
 import { getAlbums, getDerivedArtists, getDerivedCategories, getHomeTags, getSongs } from "./catalogService";
+import { uploadMediaDirectly } from "./directUpload";
 import { getMostPlayedSongs } from "./playTrackingService";
 import { getUserPlaylists } from "./playlistsService";
 
@@ -10,9 +11,10 @@ const getToken = (): string | null => {
 };
 
 async function request<T = any>(path: string, init: RequestInit = {}, auth = false): Promise<T> {
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
   const headers: Record<string, string> = {
     Accept: "application/json",
-    ...(init.body ? { "Content-Type": "application/json" } : {}),
+    ...(!isFormData && init.body ? { "Content-Type": "application/json" } : {}),
   };
 
   if (auth) {
@@ -46,6 +48,9 @@ export async function getAdminSongs(limit = 200) {
     title: song.title,
     duration: song.duration,
     album_id: song.album_id,
+    original_key: song.original_key || null,
+    cover_key: song.cover_key || null,
+    preview_key: song.preview_key || null,
     audio_url: song.audio_url || "",
     songCover_url: song.songCover_url || "",
     created_at: song.created_at,
@@ -140,7 +145,7 @@ export async function getTopFavoritesFallback(limit = 10) {
     id: song.id,
     rank: index + 1,
     title: song.title,
-    artist: song.artists?.map((a) => a.name).join(", ") || "Unknown",
+    artist: song.artists?.map((a: { name: string }) => a.name).join(", ") || "Unknown",
     favorites: song.play_count || 0,
     plays: song.play_count || 0,
     cover_url: song.songCover_url || song.album?.cover_url,
@@ -148,8 +153,8 @@ export async function getTopFavoritesFallback(limit = 10) {
 
   const artistMap = new Map<string, { id: string; name: string; favorites: number }>();
   topSongs.forEach((song) => {
-    const names = song.artist.split(",").map((n) => n.trim()).filter(Boolean);
-    names.forEach((name) => {
+    const names: string[] = song.artist.split(",").map((n: string) => n.trim()).filter(Boolean);
+    names.forEach((name: string) => {
       const key = name.toLowerCase();
       const item = artistMap.get(key) || { id: encodeURIComponent(name), name, favorites: 0 };
       item.favorites += song.favorites;
@@ -178,7 +183,9 @@ export async function createSong(payload: {
   album_id: string;
   artist?: string;
   track_number?: number;
-  s3_audio_url?: string;
+  original_key?: string | null;
+  cover_key?: string | null;
+  preview_key?: string | null;
 }) {
   return request("/songs", {
     method: "POST",
@@ -188,7 +195,9 @@ export async function createSong(payload: {
       album_id: Number(payload.album_id),
       artist: payload.artist || null,
       track_number: payload.track_number || 1,
-      s3_audio_url: payload.s3_audio_url || null,
+      original_key: payload.original_key || null,
+      cover_key: payload.cover_key || null,
+      preview_key: payload.preview_key || null,
     }),
   }, true);
 }
@@ -199,7 +208,9 @@ export async function updateSong(id: string, payload: {
   album_id: string;
   artist?: string;
   track_number?: number;
-  s3_audio_url?: string;
+  original_key?: string | null;
+  cover_key?: string | null;
+  preview_key?: string | null;
 }) {
   return request(`/songs/${id}`, {
     method: "PUT",
@@ -209,7 +220,9 @@ export async function updateSong(id: string, payload: {
       album_id: Number(payload.album_id),
       artist: payload.artist || null,
       track_number: payload.track_number || 1,
-      s3_audio_url: payload.s3_audio_url || null,
+      original_key: payload.original_key || null,
+      cover_key: payload.cover_key || null,
+      preview_key: payload.preview_key || null,
     }),
   }, true);
 }
@@ -223,12 +236,24 @@ export async function createAlbum(payload: {
   artist: string;
   release_date?: string;
   description?: string;
-  s3_cover_image_url?: string;
+  coverFile?: File | null;
 }) {
-  return request("/albums", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, true);
+  const coverUpload = payload.coverFile ? await uploadMediaDirectly(payload.coverFile, "album_cover") : null;
+
+  return request(
+    "/albums",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        title: payload.title,
+        artist: payload.artist,
+        release_date: payload.release_date,
+        description: payload.description,
+        cover_key: coverUpload?.key,
+      }),
+    },
+    true
+  );
 }
 
 export async function updateAlbum(id: string, payload: {
@@ -236,14 +261,34 @@ export async function updateAlbum(id: string, payload: {
   artist: string;
   release_date?: string;
   description?: string;
-  s3_cover_image_url?: string;
+  coverFile?: File | null;
 }) {
-  return request(`/albums/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  }, true);
+  const coverUpload = payload.coverFile ? await uploadMediaDirectly(payload.coverFile, "album_cover") : null;
+
+  return request(
+    `/albums/${id}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        title: payload.title,
+        artist: payload.artist,
+        release_date: payload.release_date,
+        description: payload.description,
+        cover_key: coverUpload?.key,
+      }),
+    },
+    true
+  );
 }
 
 export async function deleteAlbum(id: string) {
   return request(`/albums/${id}`, { method: "DELETE" }, true);
+}
+
+export async function uploadArtistSong(payload: {
+  file: File;
+  title?: string;
+  album_id?: string;
+}) {
+  return uploadMediaDirectly(payload.file, "song_audio");
 }

@@ -53,6 +53,9 @@ const Artist: React.FC = () => {
 
       setArtist(data);
     } catch (error) {
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('NetworkError'))) {
+        return;
+      }
       console.error('Error fetching artist:', error);
     } finally {
       setLoading(false);

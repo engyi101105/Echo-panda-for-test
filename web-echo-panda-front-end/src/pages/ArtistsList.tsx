@@ -8,7 +8,7 @@ import { FaSpinner } from "react-icons/fa";
 interface Artist {
   id: string;
   name: string;
-  image_url: string;
+  image_url?: string;
   bio?: string;
   gender?: string;
   role?: string;
@@ -48,6 +48,9 @@ const ArtistsList: React.FC = () => {
 
       setArtists(data);
     } catch (error) {
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('NetworkError'))) {
+        return;
+      }
       console.error("Error fetching artists:", error);
     } finally {
       setLoading(false);

@@ -36,6 +36,22 @@ const backendRequest = async <T = any>(
   return data as T;
 };
 
+const getArtistName = (artistField: any, artistNameField?: string): string | null => {
+  if (artistField && typeof artistField === "object") {
+    return artistField.stage_name || artistField.name || artistNameField || null;
+  }
+  if (typeof artistField === "string" && artistField.trim()) {
+    return artistField;
+  }
+  if (artistNameField && artistNameField.trim()) {
+    return artistNameField;
+  }
+  return null;
+}
+
+import { getSignedSongCoverUrl } from "./songMediaApi";
+import { getSignedAlbumCoverUrl } from "./songMediaApi";
+
 // Track a song play/listen
 export const trackSongPlay = async (songId: string): Promise<boolean> => {
   const parsed = Number.parseInt(songId, 10);
@@ -88,26 +104,31 @@ export const getMostPlayedSongs = async (limit: number = 25): Promise<any[]> => 
       `/stats/most-played-songs?limit=${limit}`
     );
 
-    return (result?.data || []).map((row: any) => {
+    return Promise.all((result?.data || []).map(async (row: any) => {
       const song = row.song;
+      const coverUrl = await getSignedSongCoverUrl(song.id);
+      const albumCoverUrl = song.album?.id ? await getSignedAlbumCoverUrl(song.album.id) : null;
+
       return {
         id: String(song.id),
         title: song.title,
         duration: song.duration,
-        audio_url: song.s3_audio_url,
-        songCover_url: song.album?.s3_cover_image_url || song.album?.cover_image || null,
+        audio_url: song.original_key || null,
+        songCover_url: coverUrl || albumCoverUrl || song.album?.cover_url || null,
         album_id: song.album_id ? String(song.album_id) : null,
         album: song.album
           ? {
               id: String(song.album.id),
               title: song.album.title,
-              cover_url: song.album.s3_cover_image_url || song.album.cover_image || null,
+              cover_url: albumCoverUrl || null,
             }
           : null,
-        artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: "" }] : [],
+        artists: getArtistName(song.artist, song.artist_name)
+          ? [{ id: String(song.artist_id || song.id), name: String(getArtistName(song.artist, song.artist_name)), image_url: "" }]
+          : [],
         play_count: row.play_count,
       };
-    });
+    }));
   } catch (error) {
     console.error("Error fetching most played songs:", error);
     return [];
@@ -122,26 +143,31 @@ export const getRecentlyPlayed = async (limit: number = 25): Promise<any[]> => {
     const result = await backendRequest<{ data?: any[] }>(`/listen-history?per_page=${limit}`);
     const rows = result?.data || [];
 
-    return rows.map((item: any) => {
+    return Promise.all(rows.map(async (item: any) => {
       const song = item.song;
+      const coverUrl = await getSignedSongCoverUrl(song.id);
+      const albumCoverUrl = song.album?.id ? await getSignedAlbumCoverUrl(song.album.id) : null;
+
       return {
         id: String(song.id),
         title: song.title,
         duration: song.duration,
-        audio_url: song.s3_audio_url,
-        songCover_url: song.album?.s3_cover_image_url || song.album?.cover_image || null,
+        audio_url: song.original_key || null,
+        songCover_url: coverUrl || albumCoverUrl || song.album?.cover_url || null,
         album_id: song.album_id ? String(song.album_id) : null,
         album: song.album
           ? {
               id: String(song.album.id),
               title: song.album.title,
-              cover_url: song.album.s3_cover_image_url || song.album.cover_image || null,
+              cover_url: albumCoverUrl || null,
             }
           : null,
-        artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: "" }] : [],
+        artists: getArtistName(song.artist, song.artist_name)
+          ? [{ id: String(song.artist_id || song.id), name: String(getArtistName(song.artist, song.artist_name)), image_url: "" }]
+          : [],
         listened_at: item.updated_at || item.created_at,
       };
-    });
+    }));
   } catch (error) {
     console.error("Error fetching recently played:", error);
     return [];
@@ -165,7 +191,7 @@ export const getUserListeningStats = async (): Promise<{
 
     const artistCounts: Record<string, number> = {};
     rows.forEach((item: any) => {
-      const artistName = item.song?.artist;
+      const artistName = getArtistName(item.song?.artist, item.song?.artist_name);
       const plays = item.play_count || 0;
       if (artistName) {
         artistCounts[artistName] = (artistCounts[artistName] || 0) + plays;
@@ -194,9 +220,11 @@ export const getMostPlayedAlbums = async (limit: number = 10): Promise<any[]> =>
       return {
         id: String(album.id),
         title: album.title,
-        cover_url: album.s3_cover_image_url || album.cover_image || null,
+        cover_url: album.cover_url || null,
         release_date: album.release_date,
-        artists: album.artist ? [{ id: String(album.id), name: album.artist, image_url: "" }] : [],
+        artists: getArtistName(album.artist, album.artist_name)
+          ? [{ id: String(album.artist_id || album.id), name: String(getArtistName(album.artist, album.artist_name)), image_url: "" }]
+          : [],
         play_count: row.play_count,
       };
     });

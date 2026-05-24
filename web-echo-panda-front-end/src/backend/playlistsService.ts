@@ -44,6 +44,8 @@ const backendRequest = async <T = any>(
   return data as T;
 };
 
+import { getSignedAlbumCoverUrl, getSignedSongCoverUrl } from "./songMediaApi";
+
 // Get all playlists for current user
 export const getUserPlaylists = async (): Promise<Playlist[]> => {
   if (!getBackendToken()) return [];
@@ -145,22 +147,27 @@ export const getPlaylistSongs = async (playlistId: string): Promise<any[]> => {
   try {
     const result = await backendRequest<{ data: any[] }>(`/playlists/${playlistId}/songs`);
 
-    return (result?.data || []).map((song: any) => ({
-      id: String(song.id),
-      title: song.title,
-      duration: song.duration,
-      album_id: song.album_id ? String(song.album_id) : null,
-      audio_url: song.s3_audio_url || null,
-      songCover_url: song.album?.s3_cover_image_url || song.album?.cover_image || null,
-      artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: "" }] : [],
-      album: song.album
-        ? {
-            id: String(song.album.id),
-            title: song.album.title,
-            cover_url: song.album.s3_cover_image_url || song.album.cover_image || null,
-          }
-        : null,
-      added_at: song.pivot?.added_at || song.created_at,
+    return Promise.all((result?.data || []).map(async (song: any) => {
+      const coverUrl = await getSignedSongCoverUrl(song.id);
+      const albumCoverUrl = song.album?.id ? await getSignedAlbumCoverUrl(song.album.id) : null;
+
+      return {
+        id: String(song.id),
+        title: song.title,
+        duration: song.duration,
+        album_id: song.album_id ? String(song.album_id) : null,
+        audio_url: song.original_key || null,
+        songCover_url: coverUrl || albumCoverUrl || song.album?.cover_url || null,
+        artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: "" }] : [],
+        album: song.album
+          ? {
+              id: String(song.album.id),
+              title: song.album.title,
+              cover_url: albumCoverUrl || null,
+            }
+          : null,
+        added_at: song.pivot?.added_at || song.created_at,
+      };
     }));
   } catch (error) {
     console.error("Error fetching playlist songs:", error);

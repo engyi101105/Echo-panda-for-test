@@ -4,23 +4,27 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 
 class CheckRole
 {
     /**
-     * Restrict access to the provided user roles.
+     * Handle an incoming request.
      */
-    public function handle(Request $request, Closure $next, string ...$roles): Response
+    public function handle(Request $request, Closure $next, string $roles = null)
     {
         $user = $request->user();
-
-        if (! $user) {
-            abort(401, 'Unauthenticated.');
+        if (! $roles) {
+            return $next($request);
         }
 
-        if (! in_array($user->role, $roles, true)) {
-            abort(403, 'You are not authorized to access this resource.');
+        $allowed = array_map('trim', explode(',', $roles));
+
+        if (! $user) {
+            abort(401, 'Authentication required.');
+        }
+
+        if (! in_array($user->role, $allowed, true)) {
+            abort(403, 'Insufficient role');
         }
 
         return $next($request);

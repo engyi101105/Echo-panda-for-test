@@ -4,10 +4,9 @@ import { FaArrowLeft, FaEllipsisH, FaSpinner } from "react-icons/fa";
 import { useDataCache } from "../../contexts/DataCacheContext";
 import { useAudioPlayer } from "../../contexts/AudioPlayerContext";
 import { trackSongPlay } from "../../backend/playTrackingService";
+import { buildApiUrl } from "../../backend/backendUrls";
+import { getSignedAlbumCoverUrl, getSignedSongCoverUrl } from "../../backend/songMediaApi";
 import Song from "../../components/Song";
-
-const viteEnv = (import.meta as any).env || {};
-const BACKEND_API_BASE_URL = viteEnv.VITE_BACKEND_API_URL || "http://localhost:8082/api";
 
 interface Artist {
   id: string;
@@ -18,6 +17,7 @@ interface Artist {
 interface AlbumMeta {
   id: string;
   title: string;
+  cover_key?: string | null;
   cover_url?: string;
   release_date?: string;
   type?: string;
@@ -29,6 +29,7 @@ interface SongData {
   title: string;
   duration: number;
   album_id: string | null;
+  original_key?: string | null;
   audio_url: string | null;
   songCover_url: string | null;
   created_at: string;
@@ -70,7 +71,7 @@ const AlbumDetails: React.FC = () => {
       }
 
       const data = await getCachedData(`album_details_${albumId}`, async () => {
-        const response = await fetch(`${BACKEND_API_BASE_URL}/albums/${albumId}`, {
+        const response = await fetch(buildApiUrl(`/albums/${albumId}`), {
           method: "GET",
           headers: {
             Accept: "application/json",
@@ -86,7 +87,8 @@ const AlbumDetails: React.FC = () => {
         const meta: AlbumMeta = {
           id: String(albumData.id),
           title: albumData.title,
-          cover_url: albumData.s3_cover_image_url || albumData.cover_image || undefined,
+          cover_key: albumData.cover_key || null,
+          cover_url: (await getSignedAlbumCoverUrl(albumData.id)) || undefined,
           release_date: albumData.release_date || undefined,
           type: albumData.type || undefined,
           artists: albumData.artist
@@ -96,16 +98,17 @@ const AlbumDetails: React.FC = () => {
 
         const songsData = Array.isArray(albumData?.songs) ? albumData.songs : [];
 
-        const transformed: SongData[] = (songsData || []).map((s: any) => ({
+        const transformed: SongData[] = await Promise.all((songsData || []).map(async (s: any) => ({
           id: String(s.id),
           title: s.title,
           duration: s.duration,
           album_id: s.album_id ? String(s.album_id) : null,
-          audio_url: s.s3_audio_url || null,
-          songCover_url: s.songCover_url || meta.cover_url || null,
+          original_key: s.original_key || null,
+          audio_url: s.original_key || s.audio_url,
+          songCover_url: (await getSignedSongCoverUrl(s.id)) || s.songCover_url || meta.cover_url,
           created_at: s.created_at,
           artists: s.artist ? [{ id: String(s.id), name: s.artist }] : [],
-        }));
+        })));
 
         return { album: meta, songs: transformed };
       });
@@ -113,6 +116,9 @@ const AlbumDetails: React.FC = () => {
       setAlbum(data.album);
       setSongs(data.songs);
     } catch (err) {
+      if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('NetworkError'))) {
+        return;
+      }
       console.error("Failed to load album:", err);
     } finally {
       setLoading(false);
@@ -135,7 +141,7 @@ const AlbumDetails: React.FC = () => {
       title: song.title,
       artist: artistNames,
       coverUrl: song.songCover_url || album?.cover_url || '',
-      audioUrl: song.audio_url,
+      audioUrl: song.original_key || song.audio_url,
       duration: song.duration,
     });
 

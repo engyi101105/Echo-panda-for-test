@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Album extends Model
@@ -17,12 +18,15 @@ class Album extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'artist_id',
         'title',
+        'slug',
         'artist',
         'release_date',
         'description',
-        'cover_image',
-        's3_cover_image_url',
+        'release_status',
+        'scheduled_at',
+        'cover_key',
     ];
 
     /**
@@ -34,6 +38,7 @@ class Album extends Model
     {
         return [
             'release_date' => 'date',
+            'scheduled_at' => 'datetime',
         ];
     }
 
@@ -43,6 +48,14 @@ class Album extends Model
     public function songs(): HasMany
     {
         return $this->hasMany(Song::class);
+    }
+
+    /**
+     * Get the artist that owns the album.
+     */
+    public function artistModel(): BelongsTo
+    {
+        return $this->belongsTo(Artist::class, 'artist_id');
     }
 
     /**

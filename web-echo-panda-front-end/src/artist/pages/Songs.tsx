@@ -1,326 +1,494 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { FaEdit, FaFileUpload, FaMusic, FaSave, FaTrash, FaUpload } from "react-icons/fa";
 import {
-  FaSearch, FaEdit, FaTrash, 
-  FaClock, FaPlus, FaMicrophone, 
-  FaCalendarAlt, FaCompactDisc, FaSpinner
-} from "react-icons/fa";
-import { deleteFromR2 } from "../../backend/r2Client";
-import { useDataCache } from "../../contexts/DataCacheContext";
-import SongModal from "./SongModal";
-import { deleteSong, getAdminAlbums, getAdminArtists, getAdminSongs } from "../../backend/adminApi";
-// main song component
-// Data fetching & state management
-// Song table display
-// Delete functionality
-interface Artist {
-  id: string;
-  name: string;
-  image_url: string;
+  createArtistSong,
+  deleteArtistSong,
+  getArtistIdentity,
+  getOwnedAlbums,
+  getOwnedSongs,
+  updateArtistSong,
+  uploadArtistMedia,
+  type ArtistIdentity,
+  type ArtistAlbum,
+  type ArtistSong,
+} from "../artistStudioApi";
+
+interface SongFormState {
+  title: string;
+  duration: number;
+  albumId: string;
+  trackNumber: number;
+  lyrics: string;
+  lyricsUrl: string;
+  audioUrl: string;
 }
 
-interface Album {
-  id: string;
-  title: string;
-  cover_url: string;
-}
+const EMPTY_FORM: SongFormState = {
+  title: "",
+  duration: 180,
+  albumId: "",
+  trackNumber: 1,
+  lyrics: "",
+  lyricsUrl: "",
+  audioUrl: "",
+};
 
-interface Song {
-  id: string;
-  title: string;
-  duration: number; // in seconds
-  album_id: string | null;
-  track_number?: number;
-  audio_url: string;
-  songCover_url: string;
-  created_at: string;
-  updated_at: string;
-  artists?: Artist[];
-  album?: Album;
-}
+const DRAFT_KEY = "artist_song_form_draft";
 
 export default function SongsManager() {
-  const { getCachedData, clearCache } = useDataCache();
-  const [songs, setSongs] = useState<Song[]>([]);
-  const [allArtists, setAllArtists] = useState<Artist[]>([]);
-  const [allAlbums, setAllAlbums] = useState<Album[]>([]);
+  const [songs, setSongs] = useState<ArtistSong[]>([]);
+  const [albums, setAlbums] = useState<ArtistAlbum[]>([]);
   const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [showModal, setShowModal] = useState(false);
-  const [editingSong, setEditingSong] = useState<Song | null>(null);
-  
-  const hasFetched = useRef(false);
-  // Fetch data from Supabase
-  useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    fetchSongs();
-    fetchArtists();
-    fetchAlbums();
+  const [error, setError] = useState("");
+
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadAlbumId, setUploadAlbumId] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState("Idle");
+
+  const [editingSongId, setEditingSongId] = useState<string>("");
+  const [form, setForm] = useState<SongFormState>(EMPTY_FORM);
+
+  const identity = useMemo<ArtistIdentity | null>(() => {
+    try {
+      return getArtistIdentity();
+    } catch {
+      return null;
+    }
   }, []);
 
-  const fetchSongs = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
+      setError("");
 
-      const data = await getCachedData('admin_songs', async () => {
-        const startTime = performance.now();
-        console.log('🔄 [Admin] Fetching songs...');
+      if (!identity) {
+        throw new Error("Missing artist_id in session. Please sign in again.");
+      }
 
-        const songsData = await getAdminSongs(200);
+      const [ownedSongs, ownedAlbums] = await Promise.all([
+        getOwnedSongs(identity),
+        getOwnedAlbums(identity),
+      ]);
 
-        const fetchTime = performance.now() - startTime;
-        console.log(`✅ Songs fetched in ${fetchTime.toFixed(0)}ms`);
-
-      // Transform the data to match our interface
-      const transformedSongs = (songsData || []).map((song: any) => ({
-        id: song.id,
-        title: song.title,
-        duration: song.duration,
-        album_id: song.album_id,
-        audio_url: song.audio_url,
-        songCover_url: song.songCover_url,
-        created_at: song.created_at,
-        updated_at: song.updated_at,
-        track_number: song.track_number,
-        artists: song.artists || [],
-        album: song.album || null
-      }));
-
-        console.log(`📊 Transformed ${transformedSongs.length} songs`);
-        console.log('🖼️ First song cover URL:', transformedSongs[0]?.songCover_url);
-
-        return transformedSongs;
-      });
-
-      setSongs(data);
-    } catch (error) {
-      console.error('Error fetching songs:', error);
-      alert('Failed to fetch songs');
+      setSongs(ownedSongs);
+      setAlbums(ownedAlbums);
+    } catch (loadError) {
+      console.error(loadError);
+      setError(loadError instanceof Error ? loadError.message : "Failed to load songs");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchArtists = async () => {
+  useEffect(() => {
+    loadData();
+
     try {
-      const data = await getCachedData('admin_artists_list', async () => {
-        return await getAdminArtists();
-      });
-
-      setAllArtists(data);
-    } catch (error) {
-      console.error('Error fetching artists:', error);
-    }
-  };
-
-  const fetchAlbums = async () => {
-    try {
-      const data = await getCachedData('admin_albums_list', async () => {
-        return await getAdminAlbums(300);
-      });
-
-      setAllAlbums(data);
-    } catch (error) {
-      console.error('Error fetching albums:', error);
-    }
-  };
-
-  // Format duration from seconds to mm:ss
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Parse duration from mm:ss to seconds
-  const parseDuration = (duration: string): number => {
-    const [mins, secs] = duration.split(':').map(Number);
-    return (mins || 0) * 60 + (secs || 0);
-  };
-
-
-  const filtered = useMemo(() => {
-    return songs.filter((s) => {
-      const artistNames = s.artists?.map(a => a.name).join(' ') || '';
-      const matchSearch = s.title.toLowerCase().includes(query.toLowerCase()) || 
-                         artistNames.toLowerCase().includes(query.toLowerCase());
-      return matchSearch;
-    });
-  }, [songs, query]);
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this track?")) return;
-    
-    try {
-      // Find the song to get file URLs
-      const song = songs.find(s => s.id === id);
-      
-      // Delete from database first
-      await deleteSong(id);
-
-      // Delete files from R2 if they exist
-      if (song) {
-        // Delete cover image
-        if (song.songCover_url) {
-          try {
-            const coverKey = song.songCover_url.split('/').slice(-2).join('/'); // e.g., "song-covers/filename.jpg"
-            await deleteFromR2(coverKey);
-            console.log('✅ Deleted cover from R2:', coverKey);
-          } catch (err) {
-            console.warn('⚠️ Failed to delete cover from R2:', err);
-          }
-        }
-
-        // Delete audio file
-        if (song.audio_url) {
-          try {
-            const audioKey = song.audio_url.split('/').slice(-2).join('/'); // e.g., "songs/filename.mp3"
-            await deleteFromR2(audioKey);
-            console.log('✅ Deleted audio from R2:', audioKey);
-          } catch (err) {
-            console.warn('⚠️ Failed to delete audio from R2:', err);
-          }
-        }
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as SongFormState;
+        setForm({ ...EMPTY_FORM, ...parsed });
       }
+    } catch {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+  }, []);
 
-      setSongs(songs.filter(s => s.id !== id));
-      clearCache('admin_songs'); // Clear cache after deletion
-    } catch (error) {
-      console.error('Error deleting song:', error);
-      alert('Failed to delete song');
+  const handleUploadSong = async () => {
+    if (!uploadFile) {
+      setError("Select an audio file before upload.");
+      return;
+    }
+
+    if (!uploadAlbumId) {
+      setError("Select an album before uploading a song.");
+      return;
+    }
+
+    if (!identity) {
+      setError("Missing artist_id in session. Please sign in again.");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError("");
+      setUploadProgress(10);
+      setUploadPhase("Uploading");
+
+      const progressTimer = window.setInterval(() => {
+        setUploadProgress((current) => Math.min(current + 8, 75));
+      }, 250);
+
+      const uploaded = await uploadArtistMedia({
+        file: uploadFile,
+        purpose: "song_audio",
+      });
+
+      await createArtistSong({
+        title: uploadTitle || uploadFile.name,
+        duration: 180,
+        album_id: uploadAlbumId,
+        artist: identity.displayName,
+        track_number: 1,
+        original_key: uploaded.key,
+        cover_key: undefined,
+        preview_key: undefined,
+        lyrics: "",
+        lyrics_url: undefined,
+      });
+
+      window.clearInterval(progressTimer);
+      setUploadPhase("Processing");
+      setUploadProgress(85);
+      window.setTimeout(() => {
+        setUploadPhase("Converting");
+        setUploadProgress(95);
+      }, 250);
+      window.setTimeout(() => {
+        setUploadPhase("Published");
+        setUploadProgress(100);
+      }, 500);
+
+      setUploadFile(null);
+      setUploadTitle("");
+      setUploadAlbumId("");
+      await loadData();
+    } catch (uploadError) {
+      console.error(uploadError);
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload song");
+      setUploadPhase("Failed");
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleOpenEdit = (song: Song) => {
-    setEditingSong(song);
-    setShowModal(true);
+  const beginEdit = (song: ArtistSong) => {
+    setEditingSongId(song.id);
+    setForm({
+      title: song.title,
+      duration: song.duration || 180,
+      albumId: song.albumId || "",
+      trackNumber: song.trackNumber || 1,
+      lyrics: song.lyrics || "",
+      lyricsUrl: "",
+        audioUrl: song.audioUrl || "",
+    });
+  };
+
+  const saveDraftForm = () => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+  };
+
+  const importLrcFile = async (file: File) => {
+    const content = await file.text();
+    setForm((current) => ({
+      ...current,
+      lyrics: content,
+      lyricsUrl: file.name,
+    }));
+  };
+
+  const saveSongMetadata = async () => {
+    if (!editingSongId) {
+      return;
+    }
+
+    if (!form.title.trim() || !form.albumId) {
+      setError("Title and album are required.");
+      return;
+    }
+
+    if (!identity) {
+      setError("Missing artist_id in session. Please sign in again.");
+      return;
+    }
+
+    try {
+      setError("");
+      await updateArtistSong(editingSongId, {
+        title: form.title.trim(),
+        duration: Math.max(1, Math.floor(form.duration)),
+        album_id: form.albumId,
+        artist: identity.displayName,
+        track_number: Math.max(1, Math.floor(form.trackNumber)),
+        original_key: form.audioUrl || undefined,
+        lyrics: form.lyrics || undefined,
+        lyrics_url: form.lyricsUrl || undefined,
+      });
+
+      setEditingSongId("");
+      setForm(EMPTY_FORM);
+      localStorage.removeItem(DRAFT_KEY);
+      await loadData();
+    } catch (saveError) {
+      console.error(saveError);
+      setError(saveError instanceof Error ? saveError.message : "Failed to update song");
+    }
+  };
+
+  const createSongManually = async () => {
+    if (!form.title.trim() || !form.albumId) {
+      setError("Title and album are required.");
+      return;
+    }
+
+    if (!identity) {
+      setError("Missing artist_id in session. Please sign in again.");
+      return;
+    }
+
+    try {
+      setError("");
+      await createArtistSong({
+        title: form.title.trim(),
+        duration: Math.max(1, Math.floor(form.duration)),
+        album_id: form.albumId,
+        artist: identity.displayName,
+        track_number: Math.max(1, Math.floor(form.trackNumber)),
+        original_key: form.audioUrl || undefined,
+        lyrics: form.lyrics || undefined,
+        lyrics_url: form.lyricsUrl || undefined,
+      });
+      setForm(EMPTY_FORM);
+      localStorage.removeItem(DRAFT_KEY);
+      await loadData();
+    } catch (createError) {
+      console.error(createError);
+      setError(createError instanceof Error ? createError.message : "Failed to create song metadata");
+    }
+  };
+
+  const removeSong = async (song: ArtistSong) => {
+    const confirmed = window.confirm(`Delete song: ${song.title}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteArtistSong(song.id);
+      await loadData();
+    } catch (deleteError) {
+      console.error(deleteError);
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete song");
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 text-slate-200 p-6 font-sans">
-      <div className="max-w-7xl mx-auto">
-  
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
-          <h2 className="text-3xl font-black text-white tracking-tight">Songs <span className="text-purple-400">Management</span></h2>
-          <button 
-            onClick={() => { 
-              setEditingSong(null);
-              setShowModal(true); 
-            }}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-3 rounded-2xl font-bold transition-all hover:scale-105 flex items-center gap-2 shadow-lg shadow-purple-500/20"
-          >
-            <FaPlus /> Add New Song
-          </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 p-6 md:p-10 text-white">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-4xl font-black">Songs Studio</h1>
+          <p className="text-slate-300 mt-2">
+            Upload songs, edit metadata, import synced lyrics (.lrc), and manage only your own tracks.
+          </p>
         </div>
 
-        <div className="flex flex-wrap gap-4 mb-6">
-          <div className="flex-1 min-w-[300px] relative">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input 
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-              placeholder="Search by title or artist..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+        {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">{error}</div>}
+
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 space-y-4">
+          <h2 className="text-2xl font-black flex items-center gap-2">
+            <FaUpload /> Upload Song File
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input
+              type="text"
+              value={uploadTitle}
+              onChange={(event) => setUploadTitle(event.target.value)}
+              placeholder="Song title (optional)"
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
             />
+            <select
+              value={uploadAlbumId}
+              onChange={(event) => setUploadAlbumId(event.target.value)}
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
+            >
+              <option value="">No album</option>
+              {albums.map((album) => (
+                <option key={album.id} value={album.id}>
+                  {album.title}
+                </option>
+              ))}
+            </select>
+            <label className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 cursor-pointer">
+              Select audio file
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+              />
+            </label>
+            <button
+              disabled={uploading}
+              onClick={handleUploadSong}
+              className="rounded-xl border border-purple-400/40 bg-purple-500/10 px-4 py-3 font-semibold"
+            >
+              Upload
+            </button>
+          </div>
+          {uploadFile && <p className="text-xs text-slate-300">Selected: {uploadFile.name}</p>}
+          {(uploading || uploadProgress > 0) && (
+            <div className="space-y-2">
+              <div className="h-2 w-full rounded-full bg-slate-800">
+                <div className="h-2 rounded-full bg-purple-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+              </div>
+              <p className="text-xs text-slate-300">
+                {uploadPhase} {uploadProgress}%
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 space-y-4">
+          <h2 className="text-2xl font-black flex items-center gap-2">
+            <FaEdit /> {editingSongId ? "Edit Song Metadata" : "Create Song Metadata"}
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              value={form.title}
+              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              placeholder="Song title"
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
+            />
+            <select
+              value={form.albumId}
+              onChange={(event) => setForm((current) => ({ ...current, albumId: event.target.value }))}
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
+            >
+              <option value="">Select album</option>
+              {albums.map((album) => (
+                <option key={album.id} value={album.id}>
+                  {album.title}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              value={form.duration}
+              onChange={(event) => setForm((current) => ({ ...current, duration: Number(event.target.value || 0) }))}
+              placeholder="Duration (seconds)"
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
+            />
+            <input
+              type="number"
+              min={1}
+              value={form.trackNumber}
+              onChange={(event) => setForm((current) => ({ ...current, trackNumber: Number(event.target.value || 1) }))}
+              placeholder="Track number"
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
+            />
+            <input
+              value={form.audioUrl}
+              onChange={(event) => setForm((current) => ({ ...current, audioUrl: event.target.value }))}
+              placeholder="Audio URL (optional)"
+              className="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 md:col-span-2"
+            />
+          </div>
+
+          <textarea
+            value={form.lyrics}
+            onChange={(event) => setForm((current) => ({ ...current, lyrics: event.target.value }))}
+            rows={7}
+            placeholder="Paste lyrics or synced .lrc content"
+            className="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3"
+          />
+
+          <div className="flex flex-wrap gap-3">
+            <label className="rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 cursor-pointer">
+              <FaFileUpload className="inline mr-2" /> Import .lrc file
+              <input
+                type="file"
+                accept=".lrc,text/plain"
+                className="hidden"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    await importLrcFile(file);
+                  }
+                }}
+              />
+            </label>
+            <button onClick={saveDraftForm} className="rounded-xl border border-white/20 bg-white/5 px-4 py-2.5">
+              <FaSave className="inline mr-2" /> Save Draft Form
+            </button>
+            {editingSongId ? (
+              <button
+                onClick={saveSongMetadata}
+                className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2.5"
+              >
+                Save Metadata
+              </button>
+            ) : (
+              <button
+                onClick={createSongManually}
+                className="rounded-xl border border-purple-400/40 bg-purple-500/10 px-4 py-2.5"
+              >
+                Create Metadata
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <h2 className="text-2xl font-black flex items-center gap-2">
+            <FaMusic /> Your Songs
+          </h2>
           {loading ? (
-            <div className="flex items-center justify-center py-24">
-              <FaSpinner className="text-purple-400 text-4xl animate-spin" />
-            </div>
+            <p className="mt-4 text-slate-300">Loading songs...</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 bg-white/5 text-slate-400 text-xs uppercase tracking-widest font-bold">
-                    <th className="px-6 py-5">Song & Artist</th>
-                    <th className="px-6 py-5">Album</th>
-                    <th className="px-6 py-5">Duration</th>
-                    <th className="px-6 py-5">Created</th>
-                    <th className="px-6 py-5 text-right">Actions</th>
+                  <tr className="border-b border-white/10 text-slate-400">
+                    <th className="py-3">Title</th>
+                    <th className="py-3">Album</th>
+                    <th className="py-3">Processing</th>
+                    <th className="py-3">Plays</th>
+                    <th className="py-3">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
-                {filtered.map(song => (
-                  <tr key={song.id} className="group hover:bg-white/5 transition-all">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <img 
-                          src={song.songCover_url || song.album?.cover_url || `https://ui-avatars.com/api/?name=${song.title}&background=random`}
-                          alt={song.title}
-                          className="w-12 h-12 rounded-xl object-cover shadow-lg"
-                          onError={(e) => {
-                            console.error('❌ Failed to load image:', song.songCover_url);
-                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${song.title}&background=random`;
-                          }}
-                          onLoad={() => console.log('✅ Image loaded:', song.songCover_url)}
-                        />
-                        <div>
-                          <p className="text-white font-bold leading-tight">{song.title}</p>
-                          <div className="text-slate-500 text-sm flex items-center gap-1 mt-0.5">
-                            <FaMicrophone size={10}/>
-                            {song.artists && song.artists.length > 0 
-                              ? song.artists.map(a => a.name).join(', ')
-                              : 'No artists'}
-                          </div>
+                <tbody>
+                  {songs.map((song) => (
+                    <tr key={song.id} className="border-b border-white/5">
+                      <td className="py-3 text-white font-semibold">{song.title}</td>
+                      <td className="py-3 text-slate-300">{song.albumTitle}</td>
+                      <td className="py-3">
+                        <span className="rounded-full px-3 py-1 text-xs font-semibold bg-white/10 text-slate-200 uppercase">
+                          {song.processingStatus}
+                        </span>
+                      </td>
+                      <td className="py-3 text-purple-200 font-semibold">{song.playCount.toLocaleString()}</td>
+                      <td className="py-3">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => beginEdit(song)}
+                            className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold"
+                          >
+                            <FaEdit className="inline mr-1" /> Edit
+                          </button>
+                          <button
+                            onClick={() => removeSong(song)}
+                            className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold"
+                          >
+                            <FaTrash className="inline mr-1" /> Delete
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 font-medium">
-                      {song.album ? (
-                        <div className="flex items-center gap-2">
-                          <FaCompactDisc className="text-slate-500"/> 
-                          {song.album.title}
-                        </div>
-                      ) : (
-                        <span className="text-slate-600 text-sm">No album</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 font-mono flex items-center gap-2">
-                      <FaClock className="text-slate-500" size={12}/>
-                      {formatDuration(song.duration)}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400 text-sm">
-                       <div className="flex items-center gap-2">
-                         <FaCalendarAlt size={12}/> 
-                         {new Date(song.created_at).toLocaleDateString()}
-                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-                        <button onClick={() => handleOpenEdit(song)} className="p-2 hover:bg-white/10 rounded-lg text-blue-400 hover:text-blue-300"><FaEdit/></button>
-                        <button onClick={() => handleDelete(song.id)} className="p-2 hover:bg-white/10 rounded-lg text-red-400 hover:text-red-300"><FaTrash/></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-
-              {filtered.length === 0 && (
-                <div className="text-center py-20">
-                  <div className="text-6xl mb-4 opacity-20">🎵</div>
-                  <p className="text-slate-400 text-lg">No songs found</p>
-                </div>
-              )}
+              {!loading && songs.length === 0 && <p className="py-6 text-slate-400">No songs available in your artist catalog yet.</p>}
             </div>
           )}
         </div>
       </div>
-
-      <SongModal 
-        show={showModal}
-        editingSong={editingSong}
-        allArtists={allArtists}
-        allAlbums={allAlbums}
-        onClose={() => {
-          setShowModal(false);
-          setEditingSong(null);
-        }}
-        onSave={fetchSongs}
-      />
     </div>
   );
 }

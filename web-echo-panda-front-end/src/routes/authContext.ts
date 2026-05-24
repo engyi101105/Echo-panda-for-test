@@ -13,6 +13,9 @@ import { loginFirebaseUserToBackend } from "./backendAuth";
 const db = getFirestore(app);
 
 interface UserData {
+  user_id?: number;
+  artist_id?: number | null;
+  role?: "user" | "artist" | "publicer" | "admin";
   name?: string;
   username?: string;
   email: string;
@@ -94,6 +97,9 @@ export async function SignInWithGoogle(): Promise<UserData> {
   });
 
   const userData: UserData = {
+    user_id: backendAuth.user.user_id,
+    artist_id: backendAuth.user.artist_id,
+    role: backendAuth.user.role,
     name: user.displayName || user.email || "Artist",
     email: user.email || "",
     displayName: user.displayName || "",
@@ -158,6 +164,9 @@ export async function registerWithEmail(
     });
 
     const userData: UserData = {
+      user_id: backendAuth.user.user_id,
+      artist_id: backendAuth.user.artist_id,
+      role: backendAuth.user.role,
       name: username || user.displayName || user.email || "Artist",
       username,
       email: user.email || email,
@@ -226,6 +235,9 @@ export async function signInWithEmail(email: string, password: string): Promise<
     });
 
     const userData: UserData = {
+      user_id: backendAuth.user.user_id,
+      artist_id: backendAuth.user.artist_id,
+      role: backendAuth.user.role,
       name: user.displayName || user.email || "Artist",
       email: user.email || email,
       displayName: user.displayName || "",

@@ -5,12 +5,16 @@ import {
   FaTiktok,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
+import { isAuthenticated, getCurrentUser } from "../../routes/authContext";
 
 interface Props {
   isLightMode: boolean;
 }
 
 const AppFooter: React.FC<Props> = ({ isLightMode }) => {
+  const loggedIn = isAuthenticated();
+  const user = loggedIn ? getCurrentUser() : null;
+  const isArtist = user?.backendRole === "artist" || user?.backendRole === "publicer";
   const bgClass = isLightMode ? "bg-gray-100" : "bg-gray-900";
   const textColor = isLightMode ? "text-gray-900" : "text-white";
   const linkColor = isLightMode
@@ -42,7 +46,7 @@ const AppFooter: React.FC<Props> = ({ isLightMode }) => {
             <h3 className={`font-semibold text-lg mb-3 ${textColor}`}>Explore</h3>
             <ul className="space-y-1 text-sm">
               <li><Link to="/discover" className={linkColor}>Discover</Link></li>
-              <li><Link to="/artist" className={linkColor}>Artists</Link></li>
+              {isArtist && <li><Link to="/artist/studio" className={linkColor}>My Studio</Link></li>}
               <li><Link to="/playlist" className={linkColor}>Playlists</Link></li>
               <li><Link to="/albums" className={linkColor}>Albums</Link></li>
             </ul>

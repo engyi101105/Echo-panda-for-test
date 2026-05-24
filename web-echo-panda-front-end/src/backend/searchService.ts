@@ -35,7 +35,7 @@ export async function searchContent(query: string): Promise<{ songs: Song[]; art
       title: song.title,
       artist_name: (song.artists || []).map((a) => a.name).join(", ") || "Unknown Artist",
       cover_url: song.songCover_url || song.album?.cover_url,
-      audio_url: song.audio_url,
+        audio_url: song.audio_url,
       duration: song.duration,
     }));
 

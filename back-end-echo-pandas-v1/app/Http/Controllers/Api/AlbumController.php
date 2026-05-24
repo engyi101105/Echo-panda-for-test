@@ -8,11 +8,57 @@ use App\Http\Requests\UpdateAlbumRequest;
 use App\Models\Album;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class AlbumController extends Controller
 {
     use AuthorizesRequests;
+
+    protected function signedAlbumCoverUrl(?string $coverKey): ?string
+    {
+        if (! $coverKey) {
+            return null;
+        }
+
+        /** @var mixed $disk */
+        $disk = Storage::disk('s3');
+
+        if (! method_exists($disk, 'temporaryUrl')) {
+            return null;
+        }
+
+        return $disk->temporaryUrl(ltrim($coverKey, '/'), now()->addMinutes(60));
+    }
+
+    protected function transformAlbum(Album $album): array
+    {
+        $coverUrl = $this->signedAlbumCoverUrl($album->cover_key);
+
+        return [
+            'id' => $album->id,
+            'title' => $album->title,
+            'artist_id' => $album->artist_id,
+            'artist_user_id' => $album->artistModel?->user_id,
+            'artist' => $album->artistModel
+                ? [
+                    'id' => $album->artistModel->id,
+                    'stage_name' => $album->artistModel->name,
+                    'user_id' => $album->artistModel->user_id,
+                ]
+                : null,
+            'artist_name' => $album->artist,
+            'release_date' => $album->release_date,
+            'description' => $album->description,
+            'release_status' => $album->release_status,
+            'scheduled_at' => $album->scheduled_at,
+            'cover_key' => $album->cover_key,
+            'cover_url' => $coverUrl,
+            'created_at' => $album->created_at,
+            'updated_at' => $album->updated_at,
+            'songs' => $album->songs,
+        ];
+    }
 
     /**
      * Display a listing of albums.
@@ -41,7 +87,11 @@ class AlbumController extends Controller
 
         // Pagination
         $perPage = $request->get('per_page', 15);
-        $albums = $query->paginate($perPage);
+        $albums = $query->with(['artistModel'])->paginate($perPage);
+
+        $albums->setCollection(
+            $albums->getCollection()->map(fn (Album $album) => $this->transformAlbum($album))
+        );
 
         return response()->json($albums);
     }
@@ -53,11 +103,28 @@ class AlbumController extends Controller
     {
         $this->authorize('create', Album::class);
 
-        $album = Album::create($request->validated());
+        $userArtist = $request->user()->artist;
+        if (! $userArtist) {
+            return response()->json([
+                'message' => 'Artist profile not found for this account.',
+            ], 403);
+        }
+
+        $payload = $request->validated();
+        $payload['artist_id'] = $userArtist->id;
+        $payload['artist'] = $userArtist->name;
+        $payload['release_status'] = $payload['release_status'] ?? ($payload['release_date'] ? 'published' : 'draft');
+
+        if (! empty($payload['cover_key'] ?? null)) {
+            $payload['cover_key'] = ltrim((string) $payload['cover_key'], '/');
+        }
+
+        $album = Album::create($payload);
+        $album->load(['songs', 'artistModel']);
 
         return response()->json([
             'message' => 'Album created successfully',
-            'data' => $album->load('songs'),
+            'data' => $this->transformAlbum($album),
         ], 201);
     }
 
@@ -66,7 +133,30 @@ class AlbumController extends Controller
      */
     public function show(Album $album): JsonResponse
     {
-        return response()->json($album->load('songs'));
+        $album->load(['songs', 'artistModel']);
+
+        return response()->json($this->transformAlbum($album));
+    }
+
+    /**
+     * Return a temporary S3 URL for the album cover.
+     */
+    public function coverUrl(Album $album): JsonResponse
+    {
+        $coverSource = $album->cover_key;
+        abort_if(! $coverSource, 404, 'Album cover is not available.');
+
+        $coverKey = ltrim((string) $coverSource, '/');
+        abort_if($coverKey === '', 404, 'Album cover is not available.');
+
+        $url = $this->signedAlbumCoverUrl($coverKey);
+        abort_if(! $url, 404, 'Album cover is not available.');
+
+        return response()->json([
+            'album_id' => $album->id,
+            'signed_url' => $url,
+            'expires_in_seconds' => 3600,
+        ]);
     }
 
     /**
@@ -76,11 +166,18 @@ class AlbumController extends Controller
     {
         $this->authorize('update', $album);
 
-        $album->update($request->validated());
+        $payload = $request->validated();
+
+        if (! empty($payload['cover_key'] ?? null)) {
+            $payload['cover_key'] = ltrim((string) $payload['cover_key'], '/');
+        }
+
+        $album->update($payload);
+        $album->load(['songs', 'artistModel']);
 
         return response()->json([
             'message' => 'Album updated successfully',
-            'data' => $album->load('songs'),
+            'data' => $this->transformAlbum($album),
         ]);
     }
 

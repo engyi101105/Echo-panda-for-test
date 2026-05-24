@@ -13,13 +13,21 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     libonig-dev \
     build-essential \
+    ffmpeg \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j$(nproc) gd zip pdo pdo_mysql pgsql pdo_pgsql
+    && docker-php-ext-install -j$(nproc) gd zip pdo pdo_mysql pgsql pdo_pgsql \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs
+
+RUN printf '%s\n' \
+    'post_max_size=128M' \
+    'upload_max_filesize=128M' \
+    > /usr/local/etc/php/conf.d/99-upload-limits.ini
 
 WORKDIR /var/www/html
 
