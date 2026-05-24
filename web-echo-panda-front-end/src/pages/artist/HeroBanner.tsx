@@ -3,10 +3,10 @@ import { FaCheckCircle } from "react-icons/fa";
 interface Artist {
   id: string;
   name: string;
-  image_url: string;
-  bio: string;
-  gender: string;
-  role: string;
+  image_url?: string;
+  bio?: string;
+  gender?: string;
+  role?: string;
 }
 
 interface Props {

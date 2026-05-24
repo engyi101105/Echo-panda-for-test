@@ -1,0 +1,126 @@
+{
+  "info": {
+    "name": "Echo Panda - Streaming Flow",
+    "_postman_id": "echo-panda-streaming-001",
+    "description": "Collection for testing Echo Panda audio streaming: login, ticket, ranged stream, progress, complete, lyrics.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"admin12345\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/login", "host": ["{{base_url}}"], "path": ["api","login"] }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// store token from login response",
+              "var json = pm.response.json();",
+              "if(json && json.token){ pm.environment.set('token', json.token); }",
+              "pm.test('login returned token', function(){ pm.expect(json.token).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Me (sanity)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/api/me", "host": ["{{base_url}}"], "path": ["api","me"] }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Stream Ticket",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/api/songs/{{song_id}}/stream-ticket?quality={{quality}}", "host": ["{{base_url}}"], "path": ["api","songs","{{song_id}}","stream-ticket"], "query": [{"key":"quality","value":"{{quality}}"}] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if(json && json.stream_url){ pm.environment.set('stream_url', json.stream_url); }",
+              "pm.test('stream_url present', function(){ pm.expect(json.stream_url).to.be.a('string'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Range Request (first chunk)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Range", "value": "bytes=0-262143" }
+        ],
+        "url": { "raw": "{{stream_url}}", "host": ["{{stream_url}}"] }
+      },
+      "response": []
+    },
+    {
+      "name": "Playback Progress",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"song_id\": {{song_id}},\n  \"progress_seconds\": 37,\n  \"duration_seconds\": 248,\n  \"source\": \"web\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/playback/progress", "host": ["{{base_url}}"], "path": ["api","playback","progress"] }
+      },
+      "response": []
+    },
+    {
+      "name": "Playback Complete",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"song_id\": {{song_id}},\n  \"duration_seconds\": 248,\n  \"source\": \"web\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/api/playback/complete", "host": ["{{base_url}}"], "path": ["api","playback","complete"] }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Lyrics",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/api/songs/{{song_id}}/lyrics", "host": ["{{base_url}}"], "path": ["api","songs","{{song_id}}","lyrics"] }
+      },
+      "response": []
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FaSearch, FaUser, FaSignOutAlt, FaBell, FaCog } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../routes/firebaseConfig";
+import { getSignedArtistImageUrl } from "../backend/songMediaApi";
 
 interface AdminTopbarProps {
   onSearch?: (query: string) => void;
@@ -40,6 +41,7 @@ export default function AdminTopbar({
   const [unreadCount, setUnreadCount] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [signedImageUrl, setSignedImageUrl] = useState<string>("");
 
   // Load artist data from localStorage or use default
   const getAdminFromStorage = () => {
@@ -89,6 +91,26 @@ export default function AdminTopbar({
     };
 
     fetchNotifications();
+  }, []);
+
+  // Fetch signed image URL for artist avatar
+  useEffect(() => {
+    const fetchSignedImageUrl = async () => {
+      try {
+        const stored = localStorage.getItem("artistUser");
+        if (stored) {
+          const artistUser = JSON.parse(stored);
+          if (artistUser.artist_id) {
+            const signedUrl = await getSignedArtistImageUrl(artistUser.artist_id);
+            setSignedImageUrl(signedUrl || "");
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch signed image URL:", error);
+      }
+    };
+
+    fetchSignedImageUrl();
   }, []);
 
   const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -284,9 +306,9 @@ export default function AdminTopbar({
               className="flex items-center gap-3 px-3 py-2 rounded-full hover:bg-purple-500/10 transition-all group"
             >
               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold text-sm">
-                {admin.avatar ? (
+                {signedImageUrl ? (
                   <img
-                    src={admin.avatar}
+                    src={signedImageUrl}
                     alt={admin.name}
                     className="w-full h-full rounded-full object-cover"
                   />

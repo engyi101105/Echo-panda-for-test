@@ -288,7 +288,7 @@ export const routeConfig: RouteConfig[] = [
 },
 {
   path: "/artist/artists",
-  label: "Artists",
+  label: "Studio",
   icon: null,
   component: Artists,
     layout: ArtistLayout,

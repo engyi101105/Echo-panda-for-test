@@ -1,345 +1,224 @@
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React from "react";
+import { NavLink } from "react-router-dom";
 import {
-  FaEye, FaEdit, FaBan, FaSearch, FaTimes, FaPlus, 
-  FaCamera, FaMars, FaVenus, FaGenderless, FaCalendarAlt, FaCheckCircle, FaTimesCircle
+  FaChartLine,
+  FaCheckCircle,
+  FaCompactDisc,
+  FaCrown,
+  FaEdit,
+  FaFileAlt,
+  FaImage,
+  FaMusic,
+  FaPlus,
+  FaPlayCircle,
+  FaRegChartBar,
+  FaSave,
+  FaUpload,
+  FaUserCircle,
 } from "react-icons/fa";
-import { useDataCache } from "../../contexts/DataCacheContext";
-import { getAdminArtists } from "../../backend/adminApi";
 
-interface Artist {
-  id: string;
-  created_at: string;
-  name: string;
-  image_url: string;
-  bio: string;
-  updated_at: string;
-  gender: string;
-  status: boolean;
-  role: string;
+interface StudioCapability {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  route: string;
 }
 
+const capabilities: StudioCapability[] = [
+  {
+    title: "Upload Songs",
+    description: "Add new tracks and queue them for processing.",
+    icon: <FaUpload />,
+    route: "/artist/songs",
+  },
+  {
+    title: "Upload Album Covers",
+    description: "Create artwork and attach it to releases.",
+    icon: <FaImage />,
+    route: "/artist/albums",
+  },
+  {
+    title: "Create Albums",
+    description: "Build albums, EPs, and singles from your own catalog.",
+    icon: <FaCompactDisc />,
+    route: "/artist/albums",
+  },
+  {
+    title: "Release Singles",
+    description: "Prepare standalone releases and schedule publishing.",
+    icon: <FaPlayCircle />,
+    route: "/artist/albums",
+  },
+  {
+    title: "Edit Song Metadata",
+    description: "Update title, duration, track order, and release info.",
+    icon: <FaEdit />,
+    route: "/artist/songs",
+  },
+  {
+    title: "Upload Lyrics",
+    description: "Attach synced .lrc lyrics to any song.",
+    icon: <FaFileAlt />,
+    route: "/artist/songs",
+  },
+  {
+    title: "Save Drafts",
+    description: "Keep unreleased work private until it is ready.",
+    icon: <FaSave />,
+    route: "/artist/albums",
+  },
+  {
+    title: "Publish Releases",
+    description: "Move a draft into a public release when everything is ready.",
+    icon: <FaCheckCircle />,
+    route: "/artist/albums",
+  },
+  {
+    title: "Manage Profile",
+    description: "Update your artist bio, image, and public profile.",
+    icon: <FaUserCircle />,
+    route: "/artist/settings",
+  },
+  {
+    title: "Streaming Analytics",
+    description: "Track plays, listeners, and release performance.",
+    icon: <FaChartLine />,
+    route: "/artist/dashboard",
+  },
+  {
+    title: "Play Counts",
+    description: "See which songs are getting traction over time.",
+    icon: <FaRegChartBar />,
+    route: "/artist/dashboard",
+  },
+  {
+    title: "Listener Statistics",
+    description: "Review audience growth and listening patterns.",
+    icon: <FaCrown />,
+    route: "/artist/dashboard",
+  },
+];
+
+const quickActions = [
+  { label: "Upload Song", route: "/artist/songs", icon: <FaMusic /> },
+  { label: "Create Album", route: "/artist/albums", icon: <FaPlus /> },
+  { label: "Open Analytics", route: "/artist/dashboard", icon: <FaChartLine /> },
+  { label: "Edit Profile", route: "/artist/settings", icon: <FaUserCircle /> },
+];
+
 export default function ArtistsManager() {
-  const { getCachedData, clearCache } = useDataCache();
-  const [artists, setArtists] = useState<Artist[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [modalMode, setModalMode] = useState<"add" | "edit" | "view" | null>(null);
-  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [formData, setFormData] = useState<Partial<Artist>>({
-    name: "",
-    role: "Single",
-    gender: "Male",
-    image_url: "",
-    bio: "",
-    status: true
-  });
-
-  // Fetch artists from Supabase
-  useEffect(() => {
-    fetchArtists();
-  }, []);
-
-  const fetchArtists = async () => {
-    try {
-      setLoading(true);
-
-      const data = await getCachedData('admin_artists', async () => {
-        const data = await getAdminArtists();
-        return data || [];
-      });
-
-      setArtists(data);
-    } catch (error) {
-      console.error('Error fetching artists:', error);
-      alert('Failed to fetch artists');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setFormData({ ...formData, image_url: reader.result as string });
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const openAddModal = () => {
-    setFormData({ 
-      name: "", 
-      role: "Single", 
-      gender: "Male", 
-      image_url: "", 
-      bio: "",
-      status: true
-    });
-    setModalMode("add");
-  };
-
-  const openEditModal = (artist: Artist) => {
-    setSelectedArtist(artist);
-    setFormData(artist);
-    setModalMode("edit");
-  };
-
-  const openViewModal = (artist: Artist) => {
-    setSelectedArtist(artist);
-    setModalMode("view");
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (modalMode === "add") {
-        const artist: Artist = {
-          id: `local-${Date.now()}`,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          name: formData.name || "",
-          role: formData.role || "Single",
-          gender: formData.gender || "N/A",
-          image_url: formData.image_url || `https://ui-avatars.com/api/?name=${formData.name}&background=random`,
-          bio: formData.bio || "",
-          status: formData.status ?? true,
-        };
-        setArtists([artist, ...artists]);
-      } else if (modalMode === "edit" && selectedArtist) {
-        setArtists(artists.map(a => 
-          a.id === selectedArtist.id ? { ...a, ...formData, updated_at: new Date().toISOString() } as Artist : a
-        ));
-      }
-      setModalMode(null);
-    } catch (error) {
-      console.error('Error saving artist:', error);
-      alert('Failed to save artist');
-    }
-  };
-
-  const handleToggleStatus = async (id: string) => {
-    try {
-      const artist = artists.find(a => a.id === id);
-      if (!artist) return;
-
-      setArtists(artists.map(a => 
-        a.id === id ? { ...a, status: !a.status, updated_at: new Date().toISOString() } : a
-      ));
-    } catch (error) {
-      console.error('Error toggling status:', error);
-      alert('Failed to update status');
-    }
-  };
-
-  const filtered = useMemo(() => {
-    return artists.filter((a) => 
-      a.name.toLowerCase().includes(query.toLowerCase())
-    );
-  }, [artists, query]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Loading artists...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 p-6 md:p-12 text-white font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
-
-        {/* --- HEADER --- */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-          <div>
-             <h1 className="text-3xl font-black text-white tracking-tight">
-              Artist <span className="text-purple-400">List</span>
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
+          <div className="space-y-3 max-w-3xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-200 text-xs font-bold uppercase tracking-[0.2em]">
+              <FaCrown /> Artist Studio
+            </div>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
+              Build and publish your own <span className="text-purple-400">Echo Panda</span> catalog.
             </h1>
-            <p className="text-slate-400">System management for platform creators</p>
+            <p className="text-slate-400 text-lg leading-relaxed">
+              This workspace is for artists only. Manage your own songs, albums, covers, lyrics,
+              publishing status, and analytics from one place.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-            <div className="relative flex-1 lg:min-w-[300px]">
-              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search artists..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-800/40 border border-white/10 text-white focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-              />
-            </div>
-            <button
-              onClick={openAddModal}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg transition-all"
-            >
-              <FaPlus /> Add Artist
-            </button>
+          <div className="grid grid-cols-2 gap-3 w-full lg:w-auto">
+            {quickActions.map((action) => (
+              <NavLink
+                key={action.label}
+                to={action.route}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white hover:border-purple-500/40 hover:bg-white/10 transition-all"
+              >
+                {action.icon}
+                {action.label}
+              </NavLink>
+            ))}
           </div>
         </div>
 
-        {/* --- ARTIST TABLE --- */}
-        <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-white/5 text-slate-400 text-xs uppercase tracking-widest font-bold">
-                  <th className="p-5">Profile</th>
-                  <th className="p-5">Role</th>
-                  <th className="p-5">Gender</th>
-                  <th className="p-5">Joined Date</th>
-                  <th className="p-5">Status</th>
-                  <th className="p-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              
-              <tbody className="divide-y divide-white/5">
-                {filtered.map((a) => (
-                  <tr key={a.id} className="group hover:bg-white/5 transition-all">
-                    <td className="p-5">
-                      <div className="flex items-center gap-4">
-                        <img src={a.image_url || `https://ui-avatars.com/api/?name=${a.name}&background=random`} className="w-12 h-12 rounded-2xl object-cover ring-2 ring-purple-500/20" alt="" />
-                        <div>
-                          <div className="text-white font-bold">{a.name}</div>
-                          <div className="text-xs text-slate-500">{a.role}</div>
-                        </div>
-                      </div>
-                    </td>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Scope</p>
+            <p className="mt-3 text-2xl font-black text-white">Own content only</p>
+            <p className="mt-2 text-sm text-slate-400">Artists can only manage releases and profile data that belongs to their account.</p>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Publishing</p>
+            <p className="mt-3 text-2xl font-black text-white">Drafts to public</p>
+            <p className="mt-2 text-sm text-slate-400">Keep releases private, finish metadata, then publish when ready.</p>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Insights</p>
+            <p className="mt-3 text-2xl font-black text-white">Plays and listeners</p>
+            <p className="mt-2 text-sm text-slate-400">See streaming analytics, play counts, and listener statistics for your releases.</p>
+          </div>
+        </div>
 
-                    <td className="p-5">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
-                        a.role === "Group" 
-                        ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" 
-                        : "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                      }`}>
-                        {a.role}
-                      </span>
-                    </td>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+          {capabilities.map((item) => (
+            <NavLink
+              key={item.title}
+              to={item.route}
+              className="group rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/10 transition-all hover:-translate-y-1 hover:border-purple-500/40 hover:bg-white/10"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xl shadow-lg shadow-purple-500/20">
+                  {item.icon}
+                </div>
+                <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400 group-hover:text-purple-300 transition-colors">
+                  Open
+                </span>
+              </div>
+              <h2 className="mt-5 text-xl font-black text-white">{item.title}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-400">{item.description}</p>
+            </NavLink>
+          ))}
+        </div>
 
-                    <td className="p-5">
-                      <span className="flex items-center gap-2 text-sm font-medium">
-                        {a.gender === "Male" && <FaMars className="text-blue-400" />}
-                        {a.gender === "Female" && <FaVenus className="text-pink-400" />}
-                        {(a.gender === "N/A" || a.gender === "Other") && <FaGenderless className="text-slate-500" />}
-                        {a.gender}
-                      </span>
-                    </td>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="rounded-[2rem] border border-white/10 bg-slate-950/60 p-6 backdrop-blur-md">
+            <h2 className="text-2xl font-black text-white">Artist release flow</h2>
+            <div className="mt-5 space-y-4">
+              {[
+                "Upload your audio file",
+                "Attach album cover and metadata",
+                "Add synced lyrics in .lrc format",
+                "Save as draft for later",
+                "Publish when everything is ready",
+              ].map((step, index) => (
+                <div key={step} className="flex items-start gap-4">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-purple-300 font-black">
+                    {index + 1}
+                  </div>
+                  <p className="pt-1 text-slate-300">{step}</p>
+                </div>
+              ))}
+            </div>
+          </div>
 
-                    <td className="p-5">
-                      <div className="flex items-center gap-2 text-sm text-slate-300">
-                        <FaCalendarAlt className="text-purple-400 text-xs" />
-                        {new Date(a.created_at).toLocaleDateString()}
-                      </div>
-                    </td>
-
-                    <td className="p-5">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1 w-fit ${
-                        a.status ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
-                      }`}>
-                        {a.status ? <><FaCheckCircle /> Active</> : <><FaTimesCircle /> Inactive</>}
-                      </span>
-                    </td>
-
-                    <td className="p-5 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => openViewModal(a)} className="p-2.5 bg-slate-800 hover:bg-purple-500/20 rounded-xl transition-all"><FaEye /></button>
-                        <button onClick={() => openEditModal(a)} className="p-2.5 bg-slate-800 hover:bg-blue-500/20 rounded-xl transition-all"><FaEdit /></button>
-                        <button onClick={() => handleToggleStatus(a.id)} className="p-2.5 bg-slate-800 hover:bg-red-500/20 rounded-xl transition-all"><FaBan /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="rounded-[2rem] border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-6 backdrop-blur-md">
+            <h2 className="text-2xl font-black text-white">Artist rules</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">
+              Artists must never manage other artists’ content. Every upload, release, lyric file,
+              profile edit, and analytics view should be scoped to the authenticated artist account.
+            </p>
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              {[
+                "Own songs only",
+                "Own albums only",
+                "Own profile only",
+                "Own analytics only",
+              ].map((rule) => (
+                <div key={rule} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200">
+                  {rule}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-      {modalMode && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-purple-500/30 rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative">
-            <button onClick={() => setModalMode(null)} className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors"><FaTimes size={20} /></button>
-
-            {modalMode === "view" && selectedArtist ? (
-              <div className="space-y-6 text-center">
-                <img src={selectedArtist.image_url || `https://ui-avatars.com/api/?name=${selectedArtist.name}&background=random`} className="w-32 h-32 rounded-full mx-auto object-cover border-4 border-purple-500/30" alt="" />
-                <div>
-                  <h2 className="text-3xl font-black text-white">{selectedArtist.name}</h2>
-                  <p className="text-slate-400 tracking-widest uppercase text-sm mt-1">{selectedArtist.role}</p>
-                </div>
-                {selectedArtist.bio && (
-                  <div className="bg-white/5 p-4 rounded-2xl text-left">
-                    <p className="text-xs text-slate-500 mb-2">BIO</p>
-                    <p className="text-slate-300">{selectedArtist.bio}</p>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-4 text-left bg-white/5 p-6 rounded-3xl">
-                  <div><p className="text-xs text-slate-500">ROLE</p><p className="font-bold">{selectedArtist.role}</p></div>
-                  <div><p className="text-xs text-slate-500">GENDER</p><p className="font-bold">{selectedArtist.gender}</p></div>
-                  <div><p className="text-xs text-slate-500">JOINED</p><p className="font-bold">{new Date(selectedArtist.created_at).toLocaleDateString()}</p></div>
-                  <div><p className="text-xs text-slate-500">STATUS</p><p className="font-bold">{selectedArtist.status ? "Active" : "Inactive"}</p></div>
-                </div>
-                <button onClick={() => setModalMode(null)} className="w-full py-4 bg-white/5 rounded-2xl font-bold">Close Profile</button>
-              </div>
-            ) : (
-              <form onSubmit={handleSave} className="space-y-6">
-                <h2 className="text-2xl font-black text-white">{modalMode === "add" ? "Register New" : "Edit"} <span className="text-purple-400">Artist</span></h2>
-                
-                <div className="flex flex-col items-center">
-                  <div onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-3xl bg-white/5 border-2 border-dashed border-white/20 flex items-center justify-center cursor-pointer hover:border-purple-500 overflow-hidden group relative">
-                    {formData.image_url ? <img src={formData.image_url} className="w-full h-full object-cover" alt="" /> : <FaCamera className="text-2xl text-slate-500 group-hover:text-purple-500" />}
-                  </div>
-                  <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageChange} />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-[10px] text-slate-500 ml-2 uppercase font-bold">Artist Name</label>
-                    <input required placeholder="Artist Name" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-purple-500" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500 ml-2 uppercase font-bold">Gender</label>
-                    <select className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl outline-none text-white" value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} disabled={formData.role === "Group"}>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                        <option value="N/A">N/A</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-slate-500 ml-2 uppercase font-bold">Musical Role</label>
-                    <select className="w-full px-4 py-3 bg-slate-800 border border-white/10 rounded-xl outline-none text-white" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value, gender: e.target.value === "Group" ? "N/A" : formData.gender})}>
-                        <option value="Single">Single Artist</option>
-                        <option value="Group">Musical Group</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-[10px] text-slate-500 ml-2 uppercase font-bold">Bio</label>
-                    <textarea placeholder="Artist biography..." className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:border-purple-500 resize-none" rows={3} value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 px-4 py-3 bg-white/5 border border-white/10 rounded-xl">
-                    <input type="checkbox" id="status" checked={formData.status} onChange={e => setFormData({...formData, status: e.target.checked})} className="w-4 h-4 accent-purple-500 cursor-pointer" />
-                    <label htmlFor="status" className="text-slate-300 text-sm cursor-pointer font-medium">Active Status</label>
-                </div>
-
-                <div className="flex gap-4 mt-8">
-                  <button type="button" onClick={() => setModalMode(null)} className="flex-1 py-4 bg-white/5 text-white font-bold rounded-2xl hover:bg-white/10 transition-all">Discard</button>
-                  <button type="submit" className="flex-1 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-2xl shadow-lg hover:brightness-110">
-                    {modalMode === "add" ? "Save Artist" : "Update Profile"}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

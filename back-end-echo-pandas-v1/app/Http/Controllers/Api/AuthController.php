@@ -6,14 +6,82 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\FirebaseLoginRequest;
 use App\Http\Requests\Api\LoginRequest;
 use App\Http\Requests\Api\RegisterRequest;
+use App\Models\Artist;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    protected function serializeUser(User $user): array
+    {
+        $artist = $user->artist()->first();
+
+        return [
+            'id' => $user->id,
+            'user_id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'artist_id' => $artist?->id,
+            'artist' => $artist ? [
+                'id' => $artist->id,
+                'name' => $artist->name,
+                'image_url' => $artist->image_url,
+            ] : null,
+        ];
+    }
+
+    protected function ensureArtistProfile(User $user): ?Artist
+    {
+        if (! $user->isArtistOrPublicer() && ! $user->isAdmin()) {
+            return null;
+        }
+
+        $artist = Artist::query()->where('user_id', $user->id)->first();
+
+        if (! $artist) {
+            $artist = Artist::query()
+                ->where('name', $user->name)
+                ->orWhere('slug', Str::slug($user->name))
+                ->first();
+        }
+
+        if (! $artist) {
+            $artist = Artist::query()->create([
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'slug' => Str::slug($user->name.'-'.$user->id),
+                'bio' => null,
+                'image_url' => null,
+                'is_active' => true,
+                'verification_status' => 'pending',
+            ]);
+        } else {
+            $artist->user_id = $user->id;
+            if (! $artist->slug) {
+                $artist->slug = Str::slug($artist->name.'-'.$artist->id);
+            }
+            if (! $artist->is_active) {
+                $artist->is_active = true;
+            }
+            if (! $artist->verification_status) {
+                $artist->verification_status = 'pending';
+            }
+            $artist->save();
+        }
+
+        if ($artist->name !== $user->name) {
+            $artist->name = $user->name;
+            $artist->save();
+        }
+
+        return $artist;
+    }
+
     /**
      * Register a new user.
      */
@@ -30,12 +98,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'User registered successfully',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-            ],
+            'user' => $this->serializeUser($user),
             'token' => $token,
             'token_type' => 'Bearer',
         ], 201);
@@ -58,6 +121,8 @@ class AuthController extends Controller
             ]);
         }
 
+        $this->ensureArtistProfile($user);
+
         $adminUser = $users->firstWhere('role', User::ROLE_ADMIN);
 
         if ($adminUser && Hash::check($request->password, $adminUser->password)) {
@@ -68,12 +133,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Login successful',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-            ],
+            'user' => $this->serializeUser($user),
             'token' => $token,
             'token_type' => 'Bearer',
         ]);
@@ -97,12 +157,7 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         return response()->json([
-            'user' => [
-                'id' => $request->user()->id,
-                'name' => $request->user()->name,
-                'email' => $request->user()->email,
-                'role' => $request->user()->role,
-            ],
+            'user' => $this->serializeUser($request->user()),
         ]);
     }
 
@@ -129,16 +184,13 @@ class AuthController extends Controller
             $user->save();
         }
 
+        $this->ensureArtistProfile($user);
+
         $token = $user->createToken('firebase_auth_token')->plainTextToken;
 
         return response()->json([
             'message' => 'Firebase login synchronized successfully',
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'role' => $user->role,
-            ],
+            'user' => $this->serializeUser($user),
             'firebase_uid' => $validated['firebase_uid'] ?? null,
             'provider' => $validated['provider'] ?? null,
             'redirect_to' => $user->roleRedirectTarget(),

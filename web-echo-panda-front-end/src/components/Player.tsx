@@ -4,9 +4,7 @@ import {
   FaRedo, FaRandom, FaVolumeUp, FaVolumeDown, FaVolumeMute
 } from 'react-icons/fa';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
-
-const viteEnv = (import.meta as any).env || {};
-const BACKEND_API_BASE_URL = viteEnv.VITE_BACKEND_API_URL || 'http://localhost:8082/api';
+import { getSongs } from '../backend/catalogService';
 
 const Player: React.FC = () => {
   const {
@@ -86,19 +84,7 @@ const Player: React.FC = () => {
       try {
         console.log('🎵 Fetching random songs from database');
         
-        const response = await fetch(`${BACKEND_API_BASE_URL}/songs?per_page=100`, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch songs: ${response.status}`);
-        }
-
-        const json = await response.json();
-        const allSongs = Array.isArray(json?.data) ? json.data : [];
+        const allSongs = await getSongs(100);
 
         if (allSongs && allSongs.length > 0) {
           // Convert to audio player format
@@ -107,8 +93,8 @@ const Player: React.FC = () => {
               id: String(song.id),
               title: song.title || 'Unknown Song',
               artist: song.artist || song.album?.artist || 'Unknown Artist',
-              coverUrl: song.album?.s3_cover_image_url || song.album?.cover_image || '',
-              audioUrl: song.s3_audio_url || '',
+              coverUrl: song.songCover_url || '',
+              audioUrl: song.original_key || song.audio_url || '',
             }))
             .filter((song: any) => !!song.audioUrl);
 
@@ -117,6 +103,9 @@ const Player: React.FC = () => {
           setCurrentQueueIndex(0);
         }
       } catch (error) {
+        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('NetworkError'))) {
+          return;
+        }
         console.error('❌ Error fetching random songs:', error);
         setSongQueue([]);
       }
@@ -162,11 +151,8 @@ const Player: React.FC = () => {
 
   // Don't render if there's no song playing
   if (!currentSong) {
-    console.log('🎵 Player: Not rendering - no currentSong');
     return null;
   }
-
-  console.log('🎵 Player: Rendering with song:', currentSong);
 
   const formatTime = (seconds: number) => {
     if (!isFinite(seconds)) return '0:00';

@@ -61,10 +61,11 @@ export default function ProtectedAdminRoute({ children }: ProtectedAdminRoutePro
           }
 
           if (!["artist", "publicer"].includes(role)) {
-            console.error("Only artist/publicer can access frontend dashboard");
-            await auth.signOut();
-            localStorage.removeItem("artistUser");
-            navigate("/login", { replace: true });
+            // Not an artist/publicer: send them to the public home (should not land
+            // on the artist dashboard). Artist onboarding is only for users with
+            // an artist role assigned by admin or via a dedicated flow.
+            console.info("User is not an artist/publicer; redirecting to home");
+            navigate("/", { replace: true });
             setIsChecking(false);
             return;
           }

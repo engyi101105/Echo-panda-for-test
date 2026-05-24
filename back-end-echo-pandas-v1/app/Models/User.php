@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class User extends Authenticatable
 {
@@ -80,6 +81,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Get event-level play history for this user.
+     */
+    public function playHistory()
+    {
+        return $this->hasMany(PlayHistory::class);
+    }
+
+    /**
      * Get user's song ratings.
      */
     public function ratings()
@@ -109,6 +118,14 @@ class User extends Authenticatable
     public function followers()
     {
         return $this->hasMany(ArtistFollower::class, 'artist_user_id');
+    }
+
+    /**
+     * Get the artist profile for this user.
+     */
+    public function artist(): HasOne
+    {
+        return $this->hasOne(Artist::class);
     }
 
     public function roleRedirectTarget(): string

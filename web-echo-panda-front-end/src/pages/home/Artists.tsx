@@ -47,6 +47,9 @@ const ArtistSection: React.FC<Props> = ({ title = "Artists", isLightMode = true,
 
       setArtists(data);
     } catch (error) {
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('NetworkError'))) {
+        return;
+      }
       console.error('Error fetching artists:', error);
     } finally {
       setLoading(false);

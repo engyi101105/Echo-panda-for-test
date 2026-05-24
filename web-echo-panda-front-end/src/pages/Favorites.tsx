@@ -94,15 +94,15 @@ const Favorites: React.FC = () => {
               title: song.title,
               duration: song.duration,
               album_id: song.album_id ? String(song.album_id) : null,
-              audio_url: song.s3_audio_url || null,
-              songCover_url: song.songCover_url || song.album?.s3_cover_image_url || null,
+              audio_url: song.audio_url || null,
+              songCover_url: song.songCover_url || song.album?.cover_url || null,
               created_at: favorite.created_at || song.created_at,
               artists: song.artist ? [{ id: String(song.id), name: song.artist }] : [],
               album: song.album
                 ? {
                     id: String(song.album.id),
                     title: song.album.title,
-                    cover_url: song.album.s3_cover_image_url || song.album.cover_image || undefined,
+                    cover_url: song.album.cover_url || song.album.cover_image || undefined,
                   }
                 : null,
             };
@@ -172,15 +172,15 @@ const Favorites: React.FC = () => {
       title: song.title,
       duration: song.duration,
       album_id: song.album_id ? String(song.album_id) : null,
-      audio_url: song.s3_audio_url || null,
-      songCover_url: song.songCover_url || song.album?.s3_cover_image_url || null,
+                    audio_url: song.audio_url || null,
+                    songCover_url: song.songCover_url || song.album?.cover_url || null,
       created_at: favorite.created_at || song.created_at || new Date().toISOString(),
       artists: song.artist ? [{ id: String(song.id), name: song.artist }] : [],
       album: song.album
         ? {
             id: String(song.album.id),
             title: song.album.title,
-            cover_url: song.album.s3_cover_image_url || song.album.cover_image || undefined,
+                    cover_url: song.album.cover_url || song.album.cover_image || undefined,
           }
         : null,
     };

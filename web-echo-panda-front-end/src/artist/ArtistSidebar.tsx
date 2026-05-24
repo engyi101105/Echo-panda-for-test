@@ -1,15 +1,13 @@
 import { NavLink } from "react-router-dom";
 import {
   FaChartLine,
-  FaShieldAlt,
-  FaUsers,
-  FaRegHeart,
   FaMusic,
   FaCompactDisc,
-  FaTags,
-  FaListUl,
-  FaCog,
-  FaBookmark,
+  FaUpload,
+  FaFileAlt,
+  FaSave,
+  FaCheckCircle,
+  FaUserCircle,
 } from "react-icons/fa";
 
 interface MenuItem {
@@ -19,16 +17,14 @@ interface MenuItem {
 }
 
 const menus: MenuItem[] = [
-  { name: "Dashboard", path: "/artist/dashboard", icon: <FaChartLine /> },
-  { name: "Artists", path: "/artist/admins", icon: <FaShieldAlt /> },
-  { name: "Users", path: "/artist/users", icon: <FaUsers /> },
-  { name: "Favorites", path: "/artist/favorites", icon: <FaRegHeart /> },
-  { name: "Artists", path: "/artist/artists", icon: <FaMusic /> },
-  { name: "Songs", path: "/artist/songs", icon: <FaCompactDisc /> },
-  { name: "Categories", path: "/artist/categories", icon: <FaTags /> },
-  { name: "Albums", path: "/artist/albums", icon: <FaListUl /> },
-  { name: "Tags", path: "/artist/tags", icon: <FaBookmark /> },
-  { name: "Settings", path: "/artist/settings", icon: <FaCog /> },
+  { name: "Analytics", path: "/artist/dashboard", icon: <FaChartLine /> },
+  { name: "Songs", path: "/artist/songs", icon: <FaMusic /> },
+  { name: "Releases", path: "/artist/albums", icon: <FaCompactDisc /> },
+  { name: "Upload Song", path: "/artist/songs", icon: <FaUpload /> },
+  { name: "Lyrics (.lrc)", path: "/artist/songs", icon: <FaFileAlt /> },
+  { name: "Draft Releases", path: "/artist/albums", icon: <FaSave /> },
+  { name: "Publish", path: "/artist/albums", icon: <FaCheckCircle /> },
+  { name: "Profile", path: "/artist/settings", icon: <FaUserCircle /> },
 ];
 
 export default function AdminSidebar() {
@@ -56,9 +52,9 @@ export default function AdminSidebar() {
 
       {/* Navigation Menu */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menus.map((menu) => (
+        {menus.map((menu, index) => (
           <NavLink
-            key={menu.path}
+            key={`${menu.path}-${index}`}
             to={menu.path}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
@@ -80,7 +76,7 @@ export default function AdminSidebar() {
       <div className="p-4 border-t border-purple-500/30 bg-slate-950/50">
         <div className="text-xs text-slate-400 text-center">
           <p className="text-purple-400 font-semibold">Echo Panda</p>
-          <p>Artist Panel Management</p>
+          <p>Artist Studio</p>
         </div>
       </div>
     </aside>

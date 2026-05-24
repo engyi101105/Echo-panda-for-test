@@ -1,6 +1,5 @@
-const viteEnv = (import.meta as any).env || {};
-const BACKEND_API_BASE_URL =
-  viteEnv.VITE_BACKEND_API_URL || "http://localhost:8082/api";
+import { buildApiUrl, resolveMediaUrl } from "./backendUrls";
+import { getSignedAlbumCoverUrl, getSignedSongCoverUrl, getSignedArtistImageUrl } from "./songMediaApi";
 
 export interface CatalogArtist {
   id: string;
@@ -12,6 +11,7 @@ export interface CatalogAlbum {
   id: string;
   title: string;
   cover_url?: string;
+  cover_key?: string | null;
   release_date?: string;
   type?: string;
   artists?: CatalogArtist[];
@@ -22,6 +22,9 @@ export interface CatalogSong {
   title: string;
   duration: number;
   album_id: string | null;
+  original_key?: string | null;
+  cover_key?: string | null;
+  preview_key?: string | null;
   audio_url: string | null;
   songCover_url: string | null;
   created_at: string;
@@ -34,7 +37,7 @@ export interface CatalogSong {
 }
 
 const request = async <T = any>(path: string): Promise<T> => {
-  const res = await fetch(`${BACKEND_API_BASE_URL}${path}`, {
+  const res = await fetch(buildApiUrl(path), {
     headers: {
       Accept: "application/json",
     },
@@ -47,46 +50,107 @@ const request = async <T = any>(path: string): Promise<T> => {
   return (await res.json()) as T;
 };
 
+const getArtistName = (artistField: any, artistNameField?: string): string | null => {
+  if (artistField && typeof artistField === "object") {
+    return artistField.stage_name || artistField.name || artistNameField || null;
+  }
+  if (typeof artistField === "string" && artistField.trim()) {
+    return artistField;
+  }
+  if (artistNameField && artistNameField.trim()) {
+    return artistNameField;
+  }
+  return null;
+};
+
 export async function getAlbums(limit = 10, offset = 0): Promise<CatalogAlbum[]> {
   const data = await request<{ data?: any[] }>(`/albums?per_page=200&sort_by=latest`);
   const rows = Array.isArray(data?.data) ? data.data : [];
 
-  return rows.slice(offset, offset + limit).map((album: any) => ({
+  return Promise.all(rows.slice(offset, offset + limit).map(async (album: any) => ({
     id: String(album.id),
     title: album.title,
-    cover_url: album.s3_cover_image_url || album.cover_image || undefined,
+    cover_key: album.cover_key || null,
+    cover_url: (await getSignedAlbumCoverUrl(album.id)) || undefined,
     release_date: album.release_date || undefined,
     type: album.type || undefined,
-    artists: album.artist
-      ? [{ id: String(album.id), name: album.artist, image_url: undefined }]
+    artists: getArtistName(album.artist, album.artist_name)
+      ? [{ id: String(album.artist_id || album.id), name: String(getArtistName(album.artist, album.artist_name)), image_url: undefined }]
       : [],
-  }));
+  })));
 }
 
 export async function getSongs(limit = 25): Promise<CatalogSong[]> {
   const data = await request<{ data?: any[] }>(`/songs?per_page=${Math.max(1, limit)}&sort_by=latest`);
   const rows = Array.isArray(data?.data) ? data.data : [];
 
-  return rows.map((song: any) => ({
-    id: String(song.id),
-    title: song.title,
-    duration: song.duration,
-    album_id: song.album_id ? String(song.album_id) : null,
-    audio_url: song.s3_audio_url || null,
-    songCover_url: song.album?.s3_cover_image_url || song.album?.cover_image || null,
-    created_at: song.created_at,
-    artists: song.artist ? [{ id: String(song.id), name: song.artist, image_url: undefined }] : [],
-    album: song.album
-      ? {
-          id: String(song.album.id),
-          title: song.album.title,
-          cover_url: song.album.s3_cover_image_url || song.album.cover_image || undefined,
-        }
-      : null,
+  return Promise.all(rows.map(async (song: any) => {
+    const coverUrl = await getSignedSongCoverUrl(song.id);
+
+    return {
+      id: String(song.id),
+      title: song.title,
+      duration: song.duration,
+      album_id: song.album_id ? String(song.album_id) : null,
+      original_key: song.original_key || null,
+      cover_key: song.cover_key || null,
+      preview_key: song.preview_key || null,
+      audio_url: song.original_key || null,
+      songCover_url: coverUrl || resolveMediaUrl(song.songCover_url || song.album?.cover_url || song.album?.cover_image),
+      created_at: song.created_at,
+      artists: getArtistName(song.artist, song.artist_name)
+        ? [{ id: String(song.artist_id || song.id), name: String(getArtistName(song.artist, song.artist_name)), image_url: undefined }]
+        : [],
+      album: song.album
+        ? {
+            id: String(song.album.id),
+            title: song.album.title,
+            cover_url: (await getSignedAlbumCoverUrl(song.album.id)) || undefined,
+          }
+        : null,
+    };
   }));
 }
 
 export async function getDerivedArtists(limit = 10, search = ""): Promise<CatalogArtist[]> {
+  try {
+    // First try to fetch from the public artists endpoint (includes image_url)
+    const response = await fetch(buildApiUrl('/artists'), {
+      headers: { Accept: 'application/json' },
+    });
+
+    if (response.ok) {
+      const data = await response.json().catch(() => null);
+      if (data?.data && Array.isArray(data.data)) {
+        const normalizedSearch = search.trim().toLowerCase();
+        const filtered = data.data
+          .filter((artist: any) =>
+            normalizedSearch ? artist.name.toLowerCase().includes(normalizedSearch) : true
+          );
+        
+        // Sign image URLs for artists that have them
+        const withSignedUrls = await Promise.all(
+          filtered.map(async (artist: any) => {
+            let signedImageUrl = artist.image_url;
+            if (artist.image_url && artist.id) {
+              signedImageUrl = await getSignedArtistImageUrl(artist.id);
+            }
+            return {
+              id: artist.id ? String(artist.id) : encodeURIComponent(artist.name),
+              name: artist.name,
+              image_url: signedImageUrl || undefined,
+            };
+          })
+        );
+        
+        return withSignedUrls.slice(0, Math.max(1, limit));
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching artists from public endpoint:', err);
+  }
+
+  // Fallback: derive from songs and albums if public endpoint fails
   const songs = await getSongs(200);
   const albums = await getAlbums(200, 0);
 

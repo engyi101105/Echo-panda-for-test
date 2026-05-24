@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import {
   FaTimes, FaMusic, FaClock, FaMicrophone, 
-  FaCompactDisc, FaSpinner, FaImage, FaUpload
+  FaCompactDisc, FaSpinner, FaUpload, FaImage
 } from "react-icons/fa";
-import { uploadToR2, generateFileKey, deleteFromR2 } from "../../backend/r2Client";
 import { createSong, updateSong } from "../../backend/adminApi";
+import { deleteArtistMedia, uploadArtistMedia } from "../artistStudioApi";
 
 interface Artist {
   id: string;
@@ -26,6 +26,8 @@ interface Song {
   track_number?: number;
   audio_url: string;
   songCover_url: string;
+  original_key?: string | null;
+  cover_key?: string | null;
   created_at: string;
   updated_at: string;
   artists?: Artist[];
@@ -57,11 +59,12 @@ export default function SongModal({
     songCover_url: ""
   });
 
-  const [selectedArtistIds, setSelectedArtistIds] = useState<string[]>([]);
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState("");
+
+  const [selectedArtistIds, setSelectedArtistIds] = useState<string[]>([]);
   const [audioFile, setAudioFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState<string>("");
-  const [uploadProgress, setUploadProgress] = useState({ cover: 0, audio: 0 });
+  const [uploadProgress, setUploadProgress] = useState({ audio: 0 });
   const [uploading, setUploading] = useState(false);
 
   // Reset form when modal opens/closes or editingSong changes
@@ -75,7 +78,6 @@ export default function SongModal({
         songCover_url: editingSong.songCover_url
       });
       setSelectedArtistIds(editingSong.artists?.map(a => a.id) || []);
-      setCoverPreview(editingSong.songCover_url || "");
     } else {
       setFormData({
         title: "",
@@ -85,11 +87,11 @@ export default function SongModal({
         songCover_url: ""
       });
       setSelectedArtistIds([]);
-      setCoverPreview("");
     }
-    setCoverFile(null);
     setAudioFile(null);
-    setUploadProgress({ cover: 0, audio: 0 });
+    setUploadProgress({ audio: 0 });
+    setCoverFile(null);
+    setCoverPreview("");
   }, [editingSong, show]);
 
   // Format duration from seconds to mm:ss
@@ -103,25 +105,6 @@ export default function SongModal({
   const parseDuration = (duration: string): number => {
     const [mins, secs] = duration.split(':').map(Number);
     return (mins || 0) * 60 + (secs || 0);
-  };
-
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      alert('Please upload a valid image file (JPG, PNG, or WEBP)');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Cover image must be less than 5MB');
-      return;
-    }
-
-    setCoverFile(file);
-    setCoverPreview(URL.createObjectURL(file));
   };
 
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,6 +123,65 @@ export default function SongModal({
     }
 
     setAudioFile(file);
+    // if title and album already present, auto-upload and create
+    (async () => {
+      if ((formData.title || editingSong?.title) && (formData.album_id || editingSong?.album_id)) {
+        try {
+          setUploading(true);
+          const audioResult = await uploadArtistMedia({ file, purpose: 'song_audio' });
+          const audioKey = audioResult.key;
+
+          // If a cover file is selected, upload it too and include its URL
+          let coverKey: string | undefined = undefined;
+          if (coverFile) {
+            try {
+              const coverResult = await uploadArtistMedia({ file: coverFile, purpose: 'album_cover' });
+              coverKey = coverResult.key;
+            } catch (err) {
+              console.warn('Failed to upload song cover during auto-create:', err);
+            }
+          }
+
+          // if editing, update; otherwise create
+          if (editingSong) {
+            await updateSong(editingSong.id, {
+              title: formData.title || editingSong.title,
+              duration: formData.duration || editingSong.duration || 1,
+              album_id: String(formData.album_id || editingSong.album_id || ''),
+              artist: allArtists.find((artist) => selectedArtistIds.includes(artist.id))?.name || 'Unknown Artist',
+              track_number: editingSong.track_number || 1,
+              original_key: audioKey,
+              cover_key: coverKey || editingSong.cover_key || undefined,
+            });
+          } else {
+            await createSong({
+              title: formData.title || file.name,
+              duration: formData.duration || 180,
+              album_id: String(formData.album_id || ''),
+              artist: allArtists.find((artist) => selectedArtistIds.includes(artist.id))?.name || 'Unknown Artist',
+              track_number: 1,
+              original_key: audioKey || null,
+              cover_key: coverKey || undefined,
+            });
+          }
+          onSave();
+          onClose();
+        } catch (err) {
+          console.error('Auto upload/create failed', err);
+        } finally {
+          setUploading(false);
+        }
+      }
+    })();
+  };
+
+  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return alert('Please upload an image');
+    if (file.size > 5 * 1024 * 1024) return alert('Cover must be <= 5MB');
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
   };
 
   const handleSave = async () => {
@@ -160,45 +202,37 @@ export default function SongModal({
 
     try {
       setUploading(true);
-      let coverUrl = formData.songCover_url || '';
-      let audioUrl = formData.audio_url || '';
+      // Upload audio file if new file selected
+      let audioKey: string | undefined = undefined;
+      // coverUrl may be set if a coverFile is uploaded
+      let coverKey: string | undefined = undefined;
 
-      // Upload cover image if new file selected
-      if (coverFile) {
-        setUploadProgress({ ...uploadProgress, cover: 0 });
-        const coverKey = generateFileKey(coverFile.name, 'song-covers');
-        coverUrl = await uploadToR2(coverFile, coverKey, coverFile.type);
-        setUploadProgress({ ...uploadProgress, cover: 100 });
+      if (audioFile) {
+        setUploadProgress({ audio: 0 });
+        const audioResult = await uploadArtistMedia({ file: audioFile, purpose: 'song_audio' });
+        audioKey = audioResult.key;
+        setUploadProgress({ audio: 100 });
         
-        // Delete old cover if updating
-        if (editingSong?.songCover_url) {
+        // Upload cover if present
+        let coverKey: string | undefined = undefined;
+        if (coverFile) {
           try {
-            const oldKey = editingSong.songCover_url.split('/').slice(-2).join('/');
-            await deleteFromR2(oldKey);
+            const coverResult = await uploadArtistMedia({ file: coverFile, purpose: 'album_cover' });
+            coverKey = coverResult.key;
           } catch (err) {
-            console.warn('Failed to delete old cover:', err);
+            console.warn('Failed to upload cover image:', err);
           }
         }
-      }
 
-      // Upload audio file if new file selected
-      if (audioFile) {
-        setUploadProgress({ ...uploadProgress, audio: 0 });
-        const audioKey = generateFileKey(audioFile.name, 'songs');
-        audioUrl = await uploadToR2(audioFile, audioKey, audioFile.type);
-        setUploadProgress({ ...uploadProgress, audio: 100 });
-        
         // Delete old audio if updating
         if (editingSong?.audio_url) {
           try {
-            const oldKey = editingSong.audio_url.split('/').slice(-2).join('/');
-            await deleteFromR2(oldKey);
+            await deleteArtistMedia({ url: editingSong.audio_url });
           } catch (err) {
             console.warn('Failed to delete old audio:', err);
           }
         }
       }
-
       if (editingSong) {
         await updateSong(editingSong.id, {
           title: formData.title || '',
@@ -206,7 +240,8 @@ export default function SongModal({
           album_id: String(formData.album_id || ''),
           artist: allArtists.find((artist) => selectedArtistIds.includes(artist.id))?.name || 'Unknown Artist',
           track_number: editingSong.track_number || 1,
-          s3_audio_url: audioUrl,
+          original_key: audioKey,
+          cover_key: coverKey || editingSong?.cover_key || undefined,
         });
 
         console.log('✅ Song updated successfully');
@@ -217,7 +252,8 @@ export default function SongModal({
           album_id: String(formData.album_id || ''),
           artist: allArtists.find((artist) => selectedArtistIds.includes(artist.id))?.name || 'Unknown Artist',
           track_number: 1,
-          s3_audio_url: audioUrl,
+          original_key: audioKey || null,
+          cover_key: coverKey || undefined,
         });
 
         console.log('✅ Song inserted successfully');
@@ -259,46 +295,19 @@ export default function SongModal({
           </div>
 
           {/* Song Cover Upload */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase ml-1 flex items-center gap-2">
-              <FaImage /> Song Cover Image
-            </label>
-            <div className="flex gap-4 items-center">
-              {coverPreview && (
-                <img 
-                  src={coverPreview} 
-                  alt="Cover preview" 
-                  className="w-20 h-20 rounded-xl object-cover border-2 border-purple-500"
-                />
-              )}
-              <label className="flex-1 cursor-pointer">
-                <div className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 hover:bg-white/10 transition-all flex items-center gap-3">
-                  <FaUpload className="text-purple-400" />
-                  <span className="text-slate-300">
-                    {coverFile ? coverFile.name : 'Choose cover image (JPG, PNG, WEBP - Max 5MB)'}
-                  </span>
-                </div>
-                <input 
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleCoverChange}
-                  className="hidden"
-                />
-              </label>
-            </div>
-            {uploadProgress.cover > 0 && uploadProgress.cover < 100 && (
-              <div className="w-full bg-slate-800 rounded-full h-2">
-                <div 
-                  className="bg-purple-500 h-2 rounded-full transition-all"
-                  style={{ width: `${uploadProgress.cover}%` }}
-                />
-              </div>
-            )}
-          </div>
-
           {/* Audio File Upload */}
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 uppercase ml-1 flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500 uppercase ml-1">Song Cover Image</label>
+            <label className="block cursor-pointer">
+              <div className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-8 hover:bg-white/10 transition-all flex items-center justify-center flex-col gap-2">
+                <FaImage className="text-purple-300 text-2xl" />
+                <div className="text-slate-300">Choose cover image (JPG, PNG, WEBP - Max 5MB)</div>
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handleCoverChange} />
+            </label>
+            {coverPreview && <img src={coverPreview} alt="cover" className="mt-3 h-24 w-24 rounded-lg object-cover border border-white/10" />}
+
+            <label className="text-xs font-bold text-slate-500 uppercase ml-1 flex items-center gap-2 mt-4">
               <FaMusic /> Audio File {!editingSong && <span className="text-red-400">*</span>}
             </label>
             <label className="cursor-pointer block">

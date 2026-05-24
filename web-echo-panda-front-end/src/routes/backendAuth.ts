@@ -2,9 +2,11 @@ export type BackendUserRole = "user" | "artist" | "publicer" | "admin";
 
 export interface BackendAuthUser {
   id: number;
+  user_id: number;
   name: string;
   email: string;
   role: BackendUserRole;
+  artist_id: number | null;
 }
 
 export interface BackendAuthResponse {

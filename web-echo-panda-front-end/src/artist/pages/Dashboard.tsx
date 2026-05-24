@@ -1,198 +1,157 @@
-import React, { useState, useEffect } from "react";
-import {
-  FaUsers,
-  FaCompactDisc,
-  FaMusic, 
-  FaListUl,
-  FaChartBar,
-  FaChartLine,
-  FaSpinner,
-} from "react-icons/fa";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
-import { useDataCache } from "../../contexts/DataCacheContext";
-import { getDashboardCounts, getAdminSongs } from "../../backend/adminApi";
+import { useEffect, useMemo, useState } from "react";
+import { FaChartLine, FaCompactDisc, FaHeadphones, FaMusic, FaUsers } from "react-icons/fa";
+import { getArtistAnalytics, getArtistIdentity, getOwnedAlbums, getOwnedSongs, getSongPlayMap, type ArtistAlbum, type ArtistSong } from "../artistStudioApi";
 
-
-interface StatCard {
-  title: string;
+interface MetricCard {
+  label: string;
   value: number;
+  helper: string;
   icon: React.ReactNode;
-  color: string;
-}
-
-interface Activity {
-  id: number;
-  type: "user" | "song" | "artist";
-  title: string;
-  description: string;
-  timestamp: string;
-  avatar?: string;
-}
-
-interface ChartData {
-  month: string;
-  songs: number;
-  users: number;
 }
 
 export default function Dashboard() {
-  const { getCachedData } = useDataCache();
-  const [stats, setStats] = useState<StatCard[]>([]);
-  const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [albums, setAlbums] = useState<ArtistAlbum[]>([]);
+  const [songs, setSongs] = useState<ArtistSong[]>([]);
+  const [monthlyStreams, setMonthlyStreams] = useState(0);
+  const [error, setError] = useState<string>("");
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const load = async () => {
       try {
-        const data = await getCachedData('admin_dashboard', async () => {
-          console.log('🔄 [Admin Dashboard] Fetching statistics...');
+        setLoading(true);
+        setError("");
 
-          const counts = await getDashboardCounts();
+        const identity = getArtistIdentity();
+        const [ownedAlbums, ownedSongs, playMap] = await Promise.all([
+          getOwnedAlbums(identity),
+          getOwnedSongs(identity),
+          getSongPlayMap(),
+        ]);
 
-          // Fetch users from Firebase Firestore and group by creation month
-          let usersCount = 0;
-          let userMonthCounts = new Map<string, number>();
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          // Initialize all months with 0
-          months.forEach(month => userMonthCounts.set(month, 0));
-          try {
-            const db = getFirestore();
-            const usersSnapshot = await getDocs(collection(db, 'users'));
-            usersCount = usersSnapshot.size;
-            usersSnapshot.forEach((doc) => {
-              const data = doc.data();
-              // Try to get creation date from known fields
-              let createdAt = data.createdAt || data.created_at || data.created || data.timestamp;
-              if (createdAt && createdAt.toDate) {
-                // Firestore Timestamp object
-                createdAt = createdAt.toDate();
-              } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
-                createdAt = new Date(createdAt);
-              } else {
-                createdAt = null;
-              }
-              if (createdAt instanceof Date && !isNaN(createdAt.getTime())) {
-                const month = months[createdAt.getMonth()];
-                userMonthCounts.set(month, (userMonthCounts.get(month) || 0) + 1);
-              }
-            });
-          } catch (error) {
-            console.warn('Failed to fetch users from Firestore:', error);
-          }
+        const analytics = await getArtistAnalytics().catch(() => null);
 
-          const stats: StatCard[] = [
-            { title: "Total Users", value: usersCount, icon: <FaUsers />, color: "from-blue-500 to-cyan-500" },
-            { title: "Total Songs", value: counts.songs || 0, icon: <FaCompactDisc />, color: "from-purple-500 to-pink-500" },
-            { title: "Total Artists", value: counts.artists || 0, icon: <FaMusic />, color: "from-green-500 to-emerald-500" },
-            { title: "Total Playlists", value: counts.playlists || 0, icon: <FaListUl />, color: "from-orange-500 to-red-500" },
-          ];
+        const songsWithPlayCount = ownedSongs.map((song) => ({
+          ...song,
+          playCount: playMap.get(song.id) ?? song.playCount,
+        }));
 
-          // Fetch monthly song creation data for chart
-          const songsByMonth = await getAdminSongs(500);
-
-          // Group songs by month
-          const songMonthCounts = new Map<string, number>();
-          months.forEach(month => songMonthCounts.set(month, 0));
-          (songsByMonth || []).forEach((song: any) => {
-            const date = new Date(song.created_at);
-            const month = months[date.getMonth()];
-            songMonthCounts.set(month, (songMonthCounts.get(month) || 0) + 1);
-          });
-
-          // Calculate cumulative user growth per month
-          let cumulativeUsers = 0;
-          const chartData: ChartData[] = months.map(month => {
-            cumulativeUsers += userMonthCounts.get(month) || 0;
-            return {
-              month,
-              songs: songMonthCounts.get(month) || 0,
-              users: cumulativeUsers,
-            };
-          });
-
-          console.log('📊 [Admin Dashboard] Stats loaded:', stats.map(s => `${s.title}: ${s.value}`).join(', '));
-          return { stats, chartData };
-        });
-
-        setStats(data.stats);
-        setChartData(data.chartData);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
+        setAlbums(ownedAlbums);
+        setSongs(songsWithPlayCount);
+        setMonthlyStreams(Number(analytics?.monthly_streams || 0));
+      } catch (loadError) {
+        console.error(loadError);
+        setError(loadError instanceof Error ? loadError.message : "Failed to load analytics");
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchDashboardData();
+    load();
   }, []);
 
-  const maxSongs = chartData.length ? Math.max(...chartData.map((d) => d.songs)) : 0;
-  const maxUsers = chartData.length ? Math.max(...chartData.map((d) => d.users)) : 0;
+  const analytics = useMemo(() => {
+    const totalPlays = songs.reduce((sum, song) => sum + song.playCount, 0);
+    const songsWithPlays = songs.filter((song) => song.playCount > 0).length;
+    const publishedReleases = albums.filter((album) => Boolean(album.releaseDate)).length;
+    const draftReleases = albums.length - publishedReleases;
+    const listenerStat = songsWithPlays;
 
-  const userChartPoints = chartData
-    .map((d, i) => `${(i * (560 / chartData.length)) + 30},${350 - (d.users / (maxUsers || 1)) * 250}`)
-    .join(" ");
+    const topSongs = [...songs]
+      .sort((a, b) => b.playCount - a.playCount)
+      .slice(0, 8);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 p-6">
-        <div className="flex items-center justify-center h-96">
-          <FaSpinner className="text-purple-400 text-4xl animate-spin" />
-        </div>
-      </div>
-    );
-  }
+    return {
+      totalPlays,
+      songsWithPlays,
+      publishedReleases,
+      draftReleases,
+      listenerStat,
+      topSongs,
+    };
+  }, [albums, songs]);
+
+  const cards: MetricCard[] = [
+    {
+      label: "Owned Songs",
+      value: songs.length,
+      helper: "Only your catalog",
+      icon: <FaMusic />,
+    },
+    {
+      label: "Owned Releases",
+      value: albums.length,
+      helper: `${analytics.publishedReleases} published, ${analytics.draftReleases} drafts`,
+      icon: <FaCompactDisc />,
+    },
+    {
+      label: "Play Counts",
+      value: monthlyStreams || analytics.totalPlays,
+      helper: monthlyStreams ? "Monthly streams (artist analytics API)" : "Total streams across your songs",
+      icon: <FaHeadphones />,
+    },
+    {
+      label: "Listener Statistics",
+      value: analytics.listenerStat,
+      helper: "Songs with at least one play",
+      icon: <FaUsers />,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-200 to-pink-200 bg-clip-text text-transparent">Dashboard</h1>
-          <p className="text-slate-400 mt-2">Platform overview — quick summary of key metrics</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 p-6 md:p-10 text-white">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-4xl font-black tracking-tight">Streaming Analytics</h1>
+          <p className="text-slate-300">
+            Artist view is scoped to your own content only: releases, play counts, and listener signals.
+          </p>
         </div>
 
-      {/* Dynamic Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((s) => (
-            <div key={s.title} className="bg-slate-800/60 shadow-lg rounded-xl p-8 flex items-center justify-between gap-4 hover:scale-[1.01] transition-transform">
-              <div>
-                <p className="text-slate-400 text-sm font-medium">{s.title}</p>
-                <h3 className="text-3xl font-extrabold text-white mt-2">{s.value.toLocaleString()}</h3>
+        {error && <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">{error}</div>}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {cards.map((card) => (
+            <div key={card.label} className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-slate-300">{card.label}</p>
+                <div className="text-purple-300">{card.icon}</div>
               </div>
-              <div className={`w-16 h-16 rounded-lg bg-gradient-to-br ${s.color} flex items-center justify-center text-white text-2xl`}>{s.icon}</div>
+              <p className="mt-3 text-3xl font-black text-white">{loading ? "..." : card.value.toLocaleString()}</p>
+              <p className="mt-1 text-xs text-slate-400">{card.helper}</p>
             </div>
           ))}
         </div>
 
-      {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-slate-800/60 shadow-lg rounded-lg p-6">
-          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><FaChartBar className="text-purple-400" />Songs Added Per Month</h2>
-          <div className="flex items-end justify-between h-56 gap-2">
-            {chartData.map((d, i) => {
-              const height = maxSongs ? (d.songs / maxSongs) * 100 : 0;
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full rounded-t-lg bg-gradient-to-t from-purple-500 to-pink-500 transition-all" style={{ height: `${Math.max(height, 6)}%` }} />
-                  <span className="text-xs text-slate-400">{d.month}</span>
-                </div>
-              );
-            })}
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <div className="flex items-center gap-3">
+            <FaChartLine className="text-purple-300" />
+            <h2 className="text-2xl font-black">Top Songs By Plays</h2>
           </div>
-        </div>
 
-          <div className="bg-slate-800/60 shadow-lg rounded-lg p-6">
-          <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><FaChartLine className="text-cyan-400" />User Growth</h2>
-          <svg width="100%" height="260" className="mt-2">
-            <defs>
-              <linearGradient id="gline" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#06b6d4" stopOpacity="1" />
-                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.15" />
-              </linearGradient>
-            </defs>
-            <polyline points={userChartPoints} fill="none" stroke="#06b6d4" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-slate-400 border-b border-white/10">
+                  <th className="py-3">Song</th>
+                  <th className="py-3">Album</th>
+                  <th className="py-3">Play Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.topSongs.map((song) => (
+                  <tr key={song.id} className="border-b border-white/5">
+                    <td className="py-3 text-white font-semibold">{song.title}</td>
+                    <td className="py-3 text-slate-300">{song.albumTitle}</td>
+                    <td className="py-3 text-purple-200 font-bold">{song.playCount.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!loading && analytics.topSongs.length === 0 && (
+              <p className="py-6 text-slate-400">No owned songs found. Upload your first track to start analytics.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
