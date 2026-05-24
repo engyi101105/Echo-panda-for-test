@@ -32,7 +32,6 @@ Route::get('/albums/{albumId}/songs', [SongController::class, 'getByAlbum'])->na
 Route::get('/albums/{album}/cover-url', [AlbumController::class, 'coverUrl'])->name('api.albums.cover-url');
 Route::get('/songs', [SongController::class, 'index'])->name('api.songs.index');
 Route::get('/songs/{song}', [SongController::class, 'show'])->name('api.songs.show');
-Route::get('/songs/{song}/stream-ticket', [StreamTicketController::class, 'show'])->name('api.streaming.ticket');
 Route::get('/stats/most-played-songs', [ListenHistoryController::class, 'mostPlayedSongs'])->name('api.stats.most-played-songs');
 Route::get('/stats/most-played-albums', [ListenHistoryController::class, 'mostPlayedAlbums'])->name('api.stats.most-played-albums');
 Route::get('/artists', [\App\Http\Controllers\Api\Artist\ArtistController::class, 'index'])->name('api.artists.index');
@@ -104,6 +103,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/listen-history', [ListenHistoryController::class, 'myHistory'])->name('api.listen-history.me');
 
     // Streaming Playback Routes
+    Route::get('/songs/{song}/stream-ticket', [StreamTicketController::class, 'show'])->name('api.streaming.ticket');
     Route::post('/playback/progress', [PlaybackController::class, 'progress'])->name('api.playback.progress');
     Route::post('/playback/complete', [PlaybackController::class, 'complete'])->name('api.playback.complete');
     Route::get('/playback/recent', [PlaybackController::class, 'recentlyPlayed'])->name('api.playback.recent');

@@ -1,10 +1,13 @@
 import { auth, googleProvider } from "./firebaseConfig";
 import {
   createUserWithEmailAndPassword,
+  getRedirectResult,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
   updateProfile,
+  type User,
 } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 import { app } from "./firebaseConfig";
@@ -33,62 +36,35 @@ interface AuthResult {
   error?: string;
 }
 
-// Google Sign In
-export async function SignInWithGoogle(): Promise<UserData> {
-  let result;
-  
-  try {
-    result = await signInWithPopup(auth, googleProvider);
-  } catch (popupError: any) {
-    // Handle Cross-Origin-Opener-Policy errors
-    if (popupError.code === 'auth/popup-blocked' || 
-        popupError.code === 'auth/popup-closed-by-user' ||
-        popupError.message?.includes('COOP') ||
-        popupError.message?.includes('window.closed')) {
-      throw new Error('Popup was blocked or closed. Please allow popups for this site and try again.');
-    }
-    throw popupError;
-  }
-  
-  const user = result.user;
+async function persistGoogleUser(user: User): Promise<UserData> {
+  const userDocRef = doc(db, "users", user.uid);
+  const userDoc = await getDoc(userDocRef);
 
-  // Check user status in Firestore first
-  try {
-    const userDocRef = doc(db, "users", user.uid);
-    const userDoc = await getDoc(userDocRef);
-    
-    // Check if user is blocked
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      if (userData.status === "blocked") {
-        await auth.signOut();
-        throw new Error("Your account has been blocked. Please contact support.");
-      }
-      
-      // Update last login
-      await setDoc(userDocRef, {
-        lastLogin: new Date().toISOString(),
-      }, { merge: true });
-    } else {
-      // First time sign in - create user document
-      await setDoc(userDocRef, {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        registeredAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        status: "active",
-      });
+  if (userDoc.exists()) {
+    const userData = userDoc.data();
+    if (userData.status === "blocked") {
+      await firebaseSignOut(auth);
+      throw new Error("Your account has been blocked. Please contact support.");
     }
 
-  } catch (error: any) {
-    console.error("Error checking/saving user to Firestore:", error);
-    if (error.message.includes("blocked")) {
-      throw error;
-    }
+    await setDoc(
+      userDocRef,
+      {
+        lastLogin: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } else {
+    await setDoc(userDocRef, {
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+      registeredAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
+      status: "active",
+    });
   }
 
-  // Store user data in localStorage
   const backendAuth = await loginFirebaseUserToBackend({
     email: user.email || "",
     name: user.displayName || undefined,
@@ -118,6 +94,40 @@ export async function SignInWithGoogle(): Promise<UserData> {
   }
 
   return userData;
+}
+
+// Google Sign In
+export async function SignInWithGoogle(): Promise<UserData | null> {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return await persistGoogleUser(result.user);
+  } catch (popupError: any) {
+    if (
+      popupError.code === "auth/popup-blocked" ||
+      popupError.code === "auth/internal-error" ||
+      popupError.message?.includes("COOP") ||
+      popupError.message?.includes("window.closed") ||
+      popupError.message?.includes("The popup window was blocked") ||
+      popupError.message?.includes("apis.google.com/js/api.js") ||
+      popupError.message?.includes("identitytoolkit.googleapis.com") ||
+      popupError.message?.includes("CORS request did not succeed")
+    ) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+
+    throw popupError;
+  }
+}
+
+export async function completeGoogleRedirectSignIn(): Promise<UserData | null> {
+  const result = await getRedirectResult(auth);
+
+  if (!result?.user) {
+    return null;
+  }
+
+  return await persistGoogleUser(result.user);
 }
 //=========================================================================
 

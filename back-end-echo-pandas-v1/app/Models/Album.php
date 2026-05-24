@@ -43,6 +43,23 @@ class Album extends Model
     }
 
     /**
+     * Keep the legacy cover_url attribute available as an alias for cover_key.
+     */
+    public function getCoverUrlAttribute()
+    {
+        return $this->attributes['cover_key'] ?? $this->attributes['cover_url'] ?? null;
+    }
+
+    /**
+     * Mirror writes to cover_url onto cover_key for backward compatibility.
+     */
+    public function setCoverUrlAttribute($value): void
+    {
+        $this->attributes['cover_key'] = $value;
+        $this->attributes['cover_url'] = $value;
+    }
+
+    /**
      * Get the songs for the album.
      */
     public function songs(): HasMany

@@ -25,12 +25,22 @@ export default function Create() {
         });
     };
 
+    const controlClass =
+        'mt-1 block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 shadow-sm focus:border-cyan-400/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/20';
+
     return (
         <AuthenticatedLayout header="Create Product">
             <Head title="Create Product" />
 
-            <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
-                <div className="p-6 text-gray-900 dark:text-gray-100">
+            <div className="space-y-6">
+                <section className="rounded-[1.75rem] border border-white/10 bg-[linear-gradient(135deg,rgba(8,15,30,0.95),rgba(18,28,50,0.92))] p-6 shadow-2xl shadow-slate-950/20 backdrop-blur-sm">
+                    <div className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-300/70">Merchandise control</div>
+                    <h2 className="mt-2 text-3xl font-black text-white">Create Product</h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Publish a merch item or digital product inside the same Echo Panda admin shell.</p>
+                </section>
+
+                <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/50 shadow-2xl shadow-slate-950/20 backdrop-blur-sm">
+                    <div className="p-6 text-gray-900 dark:text-gray-100">
                             <form onSubmit={submit} className="space-y-6">
                                 <div>
                                     <InputLabel
@@ -43,7 +53,7 @@ export default function Create() {
                                         type="text"
                                         name="name"
                                         value={data.name}
-                                        className="mt-1 block w-full"
+                                        className={controlClass}
                                         autoComplete="name"
                                         isFocused
                                         onChange={(e) =>
@@ -68,7 +78,7 @@ export default function Create() {
                                         id="description"
                                         name="description"
                                         value={data.description}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:focus:border-indigo-600 dark:focus:ring-indigo-600"
+                                        className={`${controlClass} min-h-32`}
                                         onChange={(e) =>
                                             setData(
                                                 'description',
@@ -96,7 +106,7 @@ export default function Create() {
                                             type="number"
                                             name="price"
                                             value={data.price}
-                                            className="mt-1 block w-full"
+                                                className={controlClass}
                                             step="0.01"
                                             min="0"
                                             onChange={(e) =>
@@ -122,7 +132,7 @@ export default function Create() {
                                             type="number"
                                             name="quantity"
                                             value={data.quantity}
-                                            className="mt-1 block w-full"
+                                                className={controlClass}
                                             min="0"
                                             onChange={(e) =>
                                                 setData(
@@ -148,7 +158,7 @@ export default function Create() {
                                         type="text"
                                         name="sku"
                                         value={data.sku}
-                                        className="mt-1 block w-full"
+                                        className={controlClass}
                                         onChange={(e) =>
                                             setData('sku', e.target.value)
                                         }
@@ -172,7 +182,7 @@ export default function Create() {
                                                 )
                                             }
                                         />
-                                        <span className="ms-2 text-sm text-gray-600 dark:text-gray-400">
+                                        <span className="ms-2 text-sm text-slate-300">
                                             Active
                                         </span>
                                     </label>
@@ -185,7 +195,8 @@ export default function Create() {
                                 </div>
                             </form>
                         </div>
-                    </div>
+                </div>
+            </div>
         </AuthenticatedLayout>
     );
 }

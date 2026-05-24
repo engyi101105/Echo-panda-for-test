@@ -11,6 +11,26 @@ use Illuminate\Support\Facades\Storage;
 
 class StreamTicketController extends Controller
 {
+    protected function resolveSignedUrl(?string $source, array $temporaryUrlOptions = []): ?string
+    {
+        if (! $source) {
+            return null;
+        }
+
+        if (preg_match('#^https?://#i', $source)) {
+            return $source;
+        }
+
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = Storage::disk('s3');
+
+        return $disk->temporaryUrl(
+            ltrim($source, '/'),
+            now()->addMinutes(60),
+            $temporaryUrlOptions
+        );
+    }
+
     /**
      * Create a short-lived stream ticket for an authenticated user or guest.
      */
@@ -44,13 +64,8 @@ class StreamTicketController extends Controller
         $key = $song->original_key;
         abort_if(! $key, 404, 'Requested audio is not available.');
 
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-        $disk = Storage::disk('s3');
-        $url = $disk->temporaryUrl(
-            $key,
-            now()->addMinutes(60),
-            ['ResponseContentType' => 'audio/mpeg']
-        );
+        $url = $this->resolveSignedUrl($key, ['ResponseContentType' => 'audio/mpeg']);
+        abort_if(! $url, 404, 'Requested audio is not available.');
 
         return response()->json([
             'song_id' => $song->id,
@@ -69,6 +84,7 @@ class StreamTicketController extends Controller
 
         $coverSource = $song->cover_key
             ?: $song->song_cover_url
+            ?: $song->album?->cover_key
             ?: $song->album?->cover_url;
 
         abort_if(! $coverSource, 404, 'Song cover is not available.');
@@ -79,12 +95,8 @@ class StreamTicketController extends Controller
 
         abort_if($coverKey === '', 404, 'Song cover is not available.');
 
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-        $disk = Storage::disk('s3');
-        $url = $disk->temporaryUrl(
-            $coverKey,
-            now()->addMinutes(60)
-        );
+        $url = $this->resolveSignedUrl($coverSource ?? $coverKey);
+        abort_if(! $url, 404, 'Song cover is not available.');
 
         return response()->json([
             'song_id' => $song->id,

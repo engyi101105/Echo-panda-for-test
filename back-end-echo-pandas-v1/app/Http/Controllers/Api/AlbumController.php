@@ -15,10 +15,14 @@ class AlbumController extends Controller
 {
     use AuthorizesRequests;
 
-    protected function signedAlbumCoverUrl(?string $coverKey): ?string
+    protected function resolveCoverUrl(?string $coverSource): ?string
     {
-        if (! $coverKey) {
+        if (! $coverSource) {
             return null;
+        }
+
+        if (preg_match('#^https?://#i', $coverSource)) {
+            return $coverSource;
         }
 
         /** @var mixed $disk */
@@ -28,12 +32,12 @@ class AlbumController extends Controller
             return null;
         }
 
-        return $disk->temporaryUrl(ltrim($coverKey, '/'), now()->addMinutes(60));
+        return $disk->temporaryUrl(ltrim($coverSource, '/'), now()->addMinutes(60));
     }
 
     protected function transformAlbum(Album $album): array
     {
-        $coverUrl = $this->signedAlbumCoverUrl($album->cover_key);
+        $coverUrl = $this->resolveCoverUrl($album->cover_key);
 
         return [
             'id' => $album->id,
@@ -149,7 +153,7 @@ class AlbumController extends Controller
         $coverKey = ltrim((string) $coverSource, '/');
         abort_if($coverKey === '', 404, 'Album cover is not available.');
 
-        $url = $this->signedAlbumCoverUrl($coverKey);
+        $url = $this->resolveCoverUrl($coverKey);
         abort_if(! $url, 404, 'Album cover is not available.');
 
         return response()->json([

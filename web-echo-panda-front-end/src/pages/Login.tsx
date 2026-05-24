@@ -1,8 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BgImage from "../assets/loginBG.jpg";
 import { getAdminBackendUrl } from "../routes/backendAuth";
-import { SignInWithGoogle, signInWithEmail } from "../routes/authContext";
+import {
+  SignInWithGoogle,
+  completeGoogleRedirectSignIn,
+  signInWithEmail,
+} from "../routes/authContext";
 
 const redirectAfterLogin = (
   navigate: ReturnType<typeof useNavigate>,
@@ -29,6 +33,29 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const redirectHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (redirectHandledRef.current) {
+      return;
+    }
+    redirectHandledRef.current = true;
+
+    const finishGoogleLogin = async (): Promise<void> => {
+      try {
+        const user = await completeGoogleRedirectSignIn();
+        if (user) {
+          console.log("Google login success:", user);
+          redirectAfterLogin(navigate, user.backendRole);
+        }
+      } catch (err) {
+        console.error("Failed to complete Google redirect login", err);
+        setError("Failed to login with Google. Please try again.");
+      }
+    };
+
+    void finishGoogleLogin();
+  }, [navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -65,6 +92,10 @@ const Login: React.FC = () => {
 
     try {
       const user = await SignInWithGoogle();
+      if (!user) {
+        return;
+      }
+
       console.log("Google login success:", user);
       redirectAfterLogin(navigate, user.backendRole);
     } catch (err: any) {

@@ -29,12 +29,22 @@ export default function Edit({ song, albums }: Props) {
         put(route('admin.songs.update', song.id));
     };
 
+    const controlClass =
+        'mt-1 block w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-slate-500 shadow-sm focus:border-cyan-400/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/20';
+
     return (
         <AuthenticatedLayout header="Edit Song">
             <Head title="Edit Song" />
 
-            <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
-                <div className="p-6 text-gray-900 dark:text-gray-100">
+            <div className="space-y-6">
+                <section className="rounded-[1.75rem] border border-white/10 bg-[linear-gradient(135deg,rgba(8,15,30,0.95),rgba(18,28,50,0.92))] p-6 shadow-2xl shadow-slate-950/20 backdrop-blur-sm">
+                    <div className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-300/70">Track editing</div>
+                    <h2 className="mt-2 text-3xl font-black text-white">Edit Song</h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Update track metadata and lyrics while keeping the admin UI consistent.</p>
+                </section>
+
+                <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/50 shadow-2xl shadow-slate-950/20 backdrop-blur-sm">
+                    <div className="p-6 text-gray-900 dark:text-gray-100">
                     <form onSubmit={submit} className="space-y-6">
                         <div>
                             <InputLabel htmlFor="album_id" value="Album" />
@@ -43,7 +53,7 @@ export default function Edit({ song, albums }: Props) {
                                 id="album_id"
                                 name="album_id"
                                 value={data.album_id}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:focus:border-indigo-600 dark:focus:ring-indigo-600"
+                                className={controlClass}
                                 onChange={(e) =>
                                     setData('album_id', e.target.value)
                                 }
@@ -71,7 +81,7 @@ export default function Edit({ song, albums }: Props) {
                                 type="text"
                                 name="title"
                                 value={data.title}
-                                className="mt-1 block w-full"
+                                className={controlClass}
                                 autoComplete="title"
                                 isFocused
                                 onChange={(e) =>
@@ -94,7 +104,7 @@ export default function Edit({ song, albums }: Props) {
                                 type="text"
                                 name="artist"
                                 value={data.artist}
-                                className="mt-1 block w-full"
+                                className={controlClass}
                                 onChange={(e) =>
                                     setData('artist', e.target.value)
                                 }
@@ -118,7 +128,7 @@ export default function Edit({ song, albums }: Props) {
                                     type="number"
                                     name="duration"
                                     value={data.duration}
-                                    className="mt-1 block w-full"
+                                        className={controlClass}
                                     min="1"
                                     onChange={(e) =>
                                         setData('duration', e.target.value)
@@ -143,7 +153,7 @@ export default function Edit({ song, albums }: Props) {
                                     type="number"
                                     name="track_number"
                                     value={data.track_number}
-                                    className="mt-1 block w-full"
+                                        className={controlClass}
                                     min="1"
                                     onChange={(e) =>
                                         setData('track_number', e.target.value)
@@ -165,7 +175,7 @@ export default function Edit({ song, albums }: Props) {
                                 id="lyrics"
                                 name="lyrics"
                                 value={data.lyrics}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:focus:border-indigo-600 dark:focus:ring-indigo-600"
+                                className={`${controlClass} min-h-40`}
                                 onChange={(e) =>
                                     setData('lyrics', e.target.value)
                                 }
@@ -184,6 +194,7 @@ export default function Edit({ song, albums }: Props) {
                             </PrimaryButton>
                         </div>
                     </form>
+                </div>
                 </div>
             </div>
         </AuthenticatedLayout>

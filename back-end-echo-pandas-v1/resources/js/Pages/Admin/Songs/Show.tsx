@@ -18,62 +18,36 @@ export default function Show({ song }: Props) {
         <AuthenticatedLayout header="Song Details">
             <Head title="Song Details" />
 
-            <div className="mb-4 flex items-center justify-end">
-                <Link href={route('admin.songs.edit', song.id)}>
-                    <PrimaryButton>Edit Song</PrimaryButton>
-                </Link>
-            </div>
-
-            <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg dark:bg-gray-800">
-                <div className="p-6 text-gray-900 dark:text-gray-100">
-                    <div className="space-y-4">
+            <div className="space-y-6">
+                <section className="rounded-[1.75rem] border border-white/10 bg-[linear-gradient(135deg,rgba(8,15,30,0.95),rgba(18,28,50,0.92))] p-6 shadow-2xl shadow-slate-950/20 backdrop-blur-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div>
-                            <h3 className="text-lg font-semibold">
-                                {song.title}
-                            </h3>
-                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                {song.artist || song.album?.artist || 'Unknown Artist'}
-                            </p>
+                            <div className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-300/70">Track profile</div>
+                            <h2 className="mt-2 text-3xl font-black text-white">{song.title}</h2>
+                            <p className="mt-2 text-sm leading-6 text-slate-300">{song.artist || song.album?.artist || 'Unknown Artist'}</p>
                         </div>
+                        <Link href={route('admin.songs.edit', song.id)}>
+                            <PrimaryButton>Edit Song</PrimaryButton>
+                        </Link>
+                    </div>
+                </section>
 
-                        <div className="grid grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-gray-700">
-                            <div>
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                    Album
-                                </p>
-                                <p className="mt-1 text-lg">
-                                    {song.album?.title || 'N/A'}
-                                </p>
-                            </div>
-
-                            <div>
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                    Track Number
-                                </p>
-                                <p className="mt-1 text-lg">
-                                    #{song.track_number}
-                                </p>
-                            </div>
-
-                            <div>
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                    Duration
-                                </p>
-                                <p className="mt-1 text-lg">
-                                    {formatDuration(song.duration)}
-                                </p>
-                            </div>
+                <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr]">
+                    <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 shadow-lg shadow-slate-950/20 backdrop-blur-sm">
+                        <div className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">Metadata</div>
+                        <div className="mt-5 space-y-4 text-sm text-slate-300">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-3"><span>Album</span><span className="font-semibold text-white">{song.album?.title || 'N/A'}</span></div>
+                            <div className="flex items-center justify-between border-b border-white/10 pb-3"><span>Track Number</span><span className="font-semibold text-white">#{song.track_number}</span></div>
+                            <div className="flex items-center justify-between border-b border-white/10 pb-3"><span>Duration</span><span className="font-semibold text-white">{formatDuration(song.duration)}</span></div>
                         </div>
+                    </div>
 
-                        {song.lyrics && (
-                            <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
-                                <h4 className="mb-2 text-sm font-semibold">
-                                    Lyrics
-                                </h4>
-                                <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-900">
-                                    {song.lyrics}
-                                </div>
-                            </div>
+                    <div className="rounded-[1.75rem] border border-white/10 bg-slate-950/50 p-6 shadow-2xl shadow-slate-950/20 backdrop-blur-sm">
+                        <div className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">Lyrics</div>
+                        {song.lyrics ? (
+                            <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-white/10 bg-white/5 p-5 text-sm leading-7 text-slate-200">{song.lyrics}</div>
+                        ) : (
+                            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-slate-400">No lyrics provided.</div>
                         )}
                     </div>
                 </div>

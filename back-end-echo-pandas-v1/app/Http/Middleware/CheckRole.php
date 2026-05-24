@@ -20,10 +20,18 @@ class CheckRole
         $allowed = array_map('trim', explode(',', $roles));
 
         if (! $user) {
+            if ($request->expectsJson() || $request->header('X-Inertia')) {
+                return response()->json(['message' => 'Authentication required.'], 401);
+            }
+
             abort(401, 'Authentication required.');
         }
 
         if (! in_array($user->role, $allowed, true)) {
+            if ($request->expectsJson() || $request->header('X-Inertia')) {
+                return response()->json(['message' => 'Insufficient role'], 403);
+            }
+
             abort(403, 'Insufficient role');
         }
 

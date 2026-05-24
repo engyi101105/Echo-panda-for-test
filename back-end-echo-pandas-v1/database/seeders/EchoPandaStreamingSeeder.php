@@ -20,7 +20,7 @@ class EchoPandaStreamingSeeder extends Seeder
             [
                 'name' => 'Echo Panda',
                 'bio' => 'Echo Panda is a synth-pop and lo-fi project built for cinematic late-night listening.',
-                'cover_image_url' => 'https://placehold.co/800x800/png?text=Echo+Panda',
+                'image_url' => 'https://placehold.co/800x800/png?text=Echo+Panda',
                 'is_active' => true,
             ]
         );
@@ -33,8 +33,7 @@ class EchoPandaStreamingSeeder extends Seeder
                 'artist' => $artist->name,
                 'release_date' => '2026-05-21',
                 'description' => 'A warm, atmospheric release designed to demonstrate secure audio streaming.',
-                'cover_image' => 'https://placehold.co/1200x1200/png?text=Midnight+Neon',
-                'cover_url' => 'https://placehold.co/1200x1200/png?text=Midnight+Neon',
+                'cover_key' => 'https://placehold.co/1200x1200/png?text=Midnight+Neon',
             ]
         );
 

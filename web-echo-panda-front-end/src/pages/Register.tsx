@@ -1,7 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import BgImage from "../assets/registerBG.png";
-import { SignInWithGoogle, registerWithEmail } from "../routes/authContext";
+import {
+  SignInWithGoogle,
+  completeGoogleRedirectSignIn,
+  registerWithEmail,
+} from "../routes/authContext";
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -13,6 +17,29 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const redirectHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (redirectHandledRef.current) {
+      return;
+    }
+    redirectHandledRef.current = true;
+
+    const finishGoogleRegister = async (): Promise<void> => {
+      try {
+        const user = await completeGoogleRedirectSignIn();
+        if (user) {
+          console.log("Google registration success:", user);
+          void navigate("/");
+        }
+      } catch (err) {
+        console.error("Failed to complete Google redirect registration", err);
+        setError("Failed to register with Google. Please try again.");
+      }
+    };
+
+    void finishGoogleRegister();
+  }, [navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -54,6 +81,10 @@ const Register: React.FC = () => {
 
     try {
       const user = await SignInWithGoogle();
+      if (!user) {
+        return;
+      }
+
       console.log("Google registration success:", user);
       void navigate("/");
     } catch (err: any) {
